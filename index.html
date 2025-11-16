@@ -83,7 +83,7 @@
     <section class="status-banner card" id="status-banner">
       <div class="status-banner-title">Data status:</div>
       <ul>
-        <li>Light pollution <strong>is included</strong> using a simple model based on location and place type, with an optional manual override.</li>
+        <li>Light pollution <strong>is included</strong> using a simple model or, when available, a grid derived from the World Atlas of Artificial Night Sky Brightness, plus an optional manual override.</li>
         <li>Moon altitude, detailed darkness and cloud data are still placeholders and not yet used in the main score.</li>
         <li>Your approximate location may be estimated from your internet connection if device GPS is not available; as a last resort we fall back to the Isle of Rùm.</li>
       </ul>
@@ -171,7 +171,7 @@
         </div>
         <div class="chip">
           <span class="chip-label">Light pollution: </span>
-          <span class="chip-value" id="chip-lightpollution">Included via a simple model, with manual override.</span>
+          <span class="chip-value" id="chip-lightpollution">Included via a grid-based model where available, with manual override.</span>
         </div>
       </div>
     </section>
@@ -277,7 +277,7 @@
       <div class="card">
         <div class="detail-heading">Light pollution</div>
         <div class="detail-body" id="detail-lightpollution">
-          We estimate light pollution from your latitude/longitude and the type of place (big city vs remote nature). You can override this using the sky brightness control above.
+          We estimate light pollution from your latitude/longitude and, when available, a precomputed light-pollution grid. You can override this using the sky brightness control above.
         </div>
       </div>
     </section>
@@ -292,7 +292,7 @@
 
     <div class="footer">
       <span id="footer-time"></span>
-      <span>Light pollution is currently estimated with a simple model, with a manual sky brightness override. You can plug in a real data source later.</span>
+      <span>Light pollution is currently estimated with a simple or grid-based model, with a manual sky brightness override. You can plug in a higher resolution data source later.</span>
     </div>
   </div>
 

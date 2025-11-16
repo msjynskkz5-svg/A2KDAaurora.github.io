@@ -8,6 +8,42 @@
 
   // -------- Light pollution module --------
   const LightPollution = (function () {
+    // Grid-based data derived from World Atlas of Artificial Night Sky Brightness (if present)
+    let gridMeta = null;   // { lat_min, lon_min, resolution_deg, rows, cols, unit }
+    let gridValues = null; // Array of sky brightness values
+    let gridLoadAttempted = false;
+
+    async function loadGridIfNeeded() {
+      if (gridLoadAttempted) return;
+      gridLoadAttempted = true;
+
+      try {
+        const res = await fetch("lightpollution_grid.json");
+        if (!res.ok) {
+          console.warn("Light pollution grid JSON not found, using heuristic only.");
+          return;
+        }
+        const data = await res.json();
+        if (!data.values || !Array.isArray(data.values)) {
+          console.warn("Light pollution grid JSON missing 'values' array.");
+          return;
+        }
+
+        gridMeta = {
+          lat_min: data.lat_min,
+          lon_min: data.lon_min,
+          resolution_deg: data.resolution_deg,
+          rows: data.rows,
+          cols: data.cols,
+          unit: data.unit || "mag_per_arcsec2"
+        };
+        gridValues = data.values;
+        console.log("Light pollution grid loaded:", gridMeta);
+      } catch (err) {
+        console.error("Failed to load light pollution grid JSON:", err);
+      }
+    }
+
     function normalizeLightPollution(options) {
       const opts = options || {};
       const bortle = typeof opts.bortle === "number" ? opts.bortle : null;
@@ -20,8 +56,8 @@
       }
 
       if (skyBrightness != null) {
-        const min = 18;
-        const max = 21.5;
+        const min = 18;    // brighter (worse)
+        const max = 21.5;  // darker (better)
         const v = Math.min(max, Math.max(min, skyBrightness));
         const norm = 1 - (v - min) / (max - min);
         return norm;
@@ -41,7 +77,55 @@
       }
     }
 
+    function sampleGrid(lat, lon) {
+      if (!gridMeta || !gridValues) return null;
+
+      const { lat_min, lon_min, resolution_deg, rows, cols } = gridMeta;
+      if (
+        typeof lat !== "number" ||
+        typeof lon !== "number" ||
+        resolution_deg <= 0
+      ) {
+        return null;
+      }
+
+      // Wrap lon into [-180, 180)
+      let lonWrapped = ((lon + 180) % 360 + 360) % 360 - 180;
+
+      const row = Math.floor((lat - lat_min) / resolution_deg);
+      const col = Math.floor((lonWrapped - lon_min) / resolution_deg);
+
+      if (row < 0 || row >= rows || col < 0 || col >= cols) return null;
+
+      const idx = row * cols + col;
+      const raw = gridValues[idx];
+
+      if (raw == null || isNaN(raw)) return null;
+
+      return { skyBrightness: Number(raw) };
+    }
+
     async function getLightPollution(lat, lon) {
+      // Try to load the grid once
+      await loadGridIfNeeded();
+
+      // 1) If grid data is available, sample it
+      const sampled = sampleGrid(lat, lon);
+      if (sampled && typeof sampled.skyBrightness === "number") {
+        const normalized = normalizeLightPollution({
+          skyBrightness: sampled.skyBrightness
+        });
+        const classification = classifyLightPollutionValue(normalized);
+        return {
+          source: "world-atlas-grid",
+          normalized,
+          classification,
+          bortleClass: undefined,
+          skyBrightness: sampled.skyBrightness
+        };
+      }
+
+      // 2) Fallback heuristic based on latitude/longitude only
       let heuristicNorm = 0.5;
 
       if (typeof lat === "number" && typeof lon === "number") {
@@ -741,7 +825,7 @@
         norm = state.autoLightPollution;
         state.lightPollution = norm;
         lpModeHintEl.textContent =
-          "Auto is a rough guess from your location. Adjust if you know your local sky.";
+          "Auto is a rough guess from your location or a grid-based model. Adjust if you know your local sky.";
       } else if (mode === "dark") {
         norm = 0.2;
         state.lightPollution = norm;
