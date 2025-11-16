@@ -1,1162 +1,637 @@
-// Simple React app using CDN React/ReactDOM (no build step)
-// GPS -> IP -> Isle of Rùm location, manual "Choose location", dark hours only,
-// cloud + moon phase icons.
+// A2KDA Aurora - main app logic
+// - LightPollution module
+// - AuroraBrain scoring
+// - App wiring (location, KP slider, panels)
 
-// --- Types (JSDoc-style comments just for clarity) ---
+(function () {
+  "use strict";
 
-/**
- * @typedef {Object} UserLocation
- * @property {string} id
- * @property {string} name
- * @property {string} [country]
- * @property {string} [region]
- * @property {number} latitude
- * @property {number} longitude
- * @property {string} timezone
- * @property {"gps"|"manual"|"ip"} source
- * @property {string} [sourceHint] // "gps" | "ip" | "rum-default" | "manual"
- */
+  // -------- Light pollution module --------
+  const LightPollution = (function () {
+    function normalizeLightPollution(options) {
+      const opts = options || {};
+      const bortle = typeof opts.bortle === "number" ? opts.bortle : null;
+      const skyBrightness =
+        typeof opts.skyBrightness === "number" ? opts.skyBrightness : null;
 
-/**
- * @typedef {"VeryUnlikely"|"Low"|"Good"|"Excellent"} ViewingChanceCategory
- */
-
-/**
- * @typedef {Object} ViewingChanceScore
- * @property {number} value
- * @property {ViewingChanceCategory} category
- */
-
-/**
- * @typedef {Object} ViewingConditionsSummary
- * @property {"Low"|"Moderate"|"High"|"Unknown"} auroraActivity
- * @property {string} cloudsText
- * @property {string} moonText
- * @property {string} darknessText
- * @property {string} lightPollutionText
- */
-
-/**
- * @typedef {Object} TonightSummary
- * @property {string} date
- * @property {UserLocation} location
- * @property {ViewingChanceCategory} bestCategory
- * @property {number} bestScore
- * @property {{start: string, end: string}|undefined} bestTimeWindow
- * @property {string} headline
- * @property {string} bestDirection
- * @property {string} explanation
- * @property {ViewingConditionsSummary} conditions
- * @property {string} lastUpdated
- */
-
-/**
- * @typedef {Object} HourlyAuroraForecast
- * @property {string} time
- * @property {ViewingChanceScore} score
- * @property {number} cloudsPercent
- * @property {string} moonIcon
- */
-
-/**
- * @typedef {"ok"|"partial"|"missing"} DataStatus
- */
-
-/**
- * @typedef {Object} DataAvailability
- * @property {DataStatus} weather
- * @property {DataStatus} spaceWeather
- * @property {DataStatus} ovation
- * @property {DataStatus} lightPollution
- * @property {string[]} notes
- */
-
-// --- Time helpers (timezone-aware display) ---
-
-function formatLocalTimeLabel(iso, timeZone) {
-  const d = new Date(iso);
-  return new Intl.DateTimeFormat("en-GB", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-    timeZone,
-  }).format(d);
-}
-
-function formatLocalDateTime(iso, timeZone) {
-  const d = new Date(iso);
-  return new Intl.DateTimeFormat("en-GB", {
-    day: "2-digit",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-    timeZone,
-  }).format(d);
-}
-
-// --- Moon phase helper (approximate) ---
-
-/**
- * Return moon phase fraction 0–1 (0 = new, 0.5 = full, 1 ~ new again)
- * @param {Date} date
- */
-function moonPhaseFraction(date) {
-  const synodicMonth = 29.53058867; // days
-  const knownNewMoon = Date.UTC(2000, 0, 6, 18, 14); // reference new moon
-  const diffDays = (date.getTime() - knownNewMoon) / 86400000;
-  let phase = diffDays / synodicMonth;
-  phase = phase - Math.floor(phase);
-  if (phase < 0) phase += 1;
-  return phase;
-}
-
-/**
- * Map moon phase fraction to an emoji icon.
- * @param {number} phase
- */
-function moonPhaseIcon(phase) {
-  if (phase < 0.0625 || phase > 0.9375) return "🌑"; // new
-  if (phase < 0.1875) return "🌒";
-  if (phase < 0.3125) return "🌓";
-  if (phase < 0.4375) return "🌔";
-  if (phase < 0.5625) return "🌕"; // full
-  if (phase < 0.6875) return "🌖";
-  if (phase < 0.8125) return "🌗";
-  return "🌘";
-}
-
-// --- Cloud icon helper (night-friendly) ---
-
-function cloudIconForPercent(pct) {
-  if (pct <= 10) return "✨";           // essentially clear
-  if (pct <= 40) return "☁️";          // thin / broken cloud
-  if (pct <= 80) return "☁️☁️";        // cloudy
-  return "🌧";                          // very overcast / sky mostly blocked
-}
-
-// --- Location helpers: GPS -> IP -> Isle of Rùm ---
-
-function rumFallbackLocation() {
-  return {
-    id: "fallback-rum",
-    name: "Isle of Rùm",
-    country: "United Kingdom",
-    region: "Scotland",
-    latitude: 56.99,
-    longitude: -6.33,
-    timezone: "Europe/London",
-    source: "manual",
-    sourceHint: "rum-default",
-  };
-}
-
-async function fetchIpLocation() {
-  try {
-    const res = await fetch("https://ipapi.co/json/");
-    if (!res.ok) throw new Error("IP geo failed");
-    const data = await res.json();
-    if (
-      typeof data.latitude !== "number" ||
-      typeof data.longitude !== "number"
-    ) {
-      return null;
-    }
-    const name =
-      data.city && data.city.length > 0
-        ? "Near " + data.city
-        : "Your region";
-    return {
-      id: "ip-location",
-      name: name,
-      country: data.country_name || "",
-      region: data.region || "",
-      latitude: data.latitude,
-      longitude: data.longitude,
-      timezone: data.timezone || "UTC",
-      source: "ip",
-      sourceHint: "ip",
-    };
-  } catch (e) {
-    console.error("IP-based location failed", e);
-    return null;
-  }
-}
-
-/**
- * Initial auto location: GPS -> IP -> Rum
- * @returns {Promise<UserLocation>}
- */
-function getAutoLocation() {
-  return new Promise(function (resolve) {
-    function useIpThenRum() {
-      fetchIpLocation()
-        .then(function (ipLoc) {
-          if (ipLoc) resolve(ipLoc);
-          else resolve(rumFallbackLocation());
-        })
-        .catch(function () {
-          resolve(rumFallbackLocation());
-        });
-    }
-
-    if (!("geolocation" in navigator)) {
-      useIpThenRum();
-      return;
-    }
-
-    navigator.geolocation.getCurrentPosition(
-      function (pos) {
-        resolve({
-          id: "gps",
-          name: "Your location",
-          latitude: pos.coords.latitude,
-          longitude: pos.coords.longitude,
-          country: "",
-          region: "",
-          timezone:
-            Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
-          source: "gps",
-          sourceHint: "gps",
-        });
-      },
-      function () {
-        // Geolocation failed or denied
-        useIpThenRum();
-      },
-      { enableHighAccuracy: false, timeout: 15000 }
-    );
-  });
-}
-
-// --- Data fetching helpers ---
-
-/**
- * Fetch weather (cloud cover + sunrise/sunset + is_day) from Open-Meteo.
- * @param {UserLocation} location
- */
-async function fetchWeather(location) {
-  const url =
-    "https://api.open-meteo.com/v1/forecast?" +
-    "latitude=" +
-    encodeURIComponent(location.latitude) +
-    "&longitude=" +
-    encodeURIComponent(location.longitude) +
-    "&hourly=cloud_cover,is_day" +
-    "&daily=sunrise,sunset" +
-    "&forecast_days=1" +
-    "&timezone=auto";
-
-  const res = await fetch(url);
-  if (!res.ok) {
-    throw new Error("Weather fetch failed: " + res.status);
-  }
-  const data = await res.json();
-  return data;
-}
-
-/**
- * Fetch simple space-weather data from NOAA SWPC.
- * We'll just use latest Bz and solar wind speed as a rough indicator.
- */
-async function fetchSpaceWeather() {
-  const magUrl =
-    "https://services.swpc.noaa.gov/products/solar-wind/mag-5-minute.json";
-  const plasmaUrl =
-    "https://services.swpc.noaa.gov/products/solar-wind/plasma-5-minute.json";
-
-  const [magRes, plasmaRes] = await Promise.all([
-    fetch(magUrl),
-    fetch(plasmaUrl),
-  ]);
-  if (!magRes.ok || !plasmaRes.ok) {
-    throw new Error("Space-weather fetch failed");
-  }
-
-  const magJson = await magRes.json();
-  const plasmaJson = await plasmaRes.json();
-
-  const lastMag = magJson[magJson.length - 1];
-  const magHeaders = magJson[0];
-  const idxBz = magHeaders.indexOf("bz_gsm");
-  const idxBt = magHeaders.indexOf("bt");
-
-  const lastPlasma = plasmaJson[plasmaJson.length - 1];
-  const plasmaHeaders = plasmaJson[0];
-  const idxSpeed = plasmaHeaders.indexOf("speed");
-
-  const bz = idxBz >= 0 ? parseFloat(lastMag[idxBz]) : NaN;
-  const bt = idxBt >= 0 ? parseFloat(lastMag[idxBt]) : NaN;
-  const speed = idxSpeed >= 0 ? parseFloat(lastPlasma[idxSpeed]) : NaN;
-
-  let activityLabel = "Unknown";
-  let baseStrength = 3; // 0–10 internal
-
-  if (!isNaN(bz) && !isNaN(speed)) {
-    if (bz < -5 && speed > 550) {
-      activityLabel = "High";
-      baseStrength = 8;
-    } else if (bz < -2 && speed > 450) {
-      activityLabel = "Moderate";
-      baseStrength = 6;
-    } else {
-      activityLabel = "Low";
-      baseStrength = 3;
-    }
-  }
-
-  return {
-    bz,
-    bt,
-    speed,
-    activityLabel,
-    baseStrength,
-  };
-}
-
-/**
- * Build hourly forecasts and tonight summary from raw data.
- */
-function buildForecast(location, weatherData, spaceWeather) {
-  const now = Date.now();
-
-  const timezone =
-    weatherData && weatherData.timezone
-      ? weatherData.timezone
-      : location.timezone;
-
-  const loc = Object.assign({}, location, { timezone: timezone });
-
-  /** @type {HourlyAuroraForecast[]} */
-  const hourly = [];
-
-  if (
-    weatherData &&
-    weatherData.hourly &&
-    Array.isArray(weatherData.hourly.time) &&
-    Array.isArray(weatherData.hourly.cloud_cover)
-  ) {
-    const times = weatherData.hourly.time;
-    const clouds = weatherData.hourly.cloud_cover;
-    const isDayArray = weatherData.hourly.is_day || [];
-
-    for (let i = 0; i < times.length; i++) {
-      const t = new Date(times[i]);
-
-      // Skip if it's daytime according to is_day flag
-      if (isDayArray.length && isDayArray[i] === 1) continue;
-
-      // Limit to next ~8 dark hours
-      if (t.getTime() >= now && hourly.length < 8) {
-        const cloud = clouds[i];
-        const base =
-          spaceWeather && typeof spaceWeather.baseStrength === "number"
-            ? spaceWeather.baseStrength
-            : 3;
-
-        let scoreValue = base * (1 - cloud / 100);
-        if (scoreValue < 0) scoreValue = 0;
-        if (scoreValue > 10) scoreValue = 10;
-
-        let category = "VeryUnlikely";
-        if (scoreValue >= 8) category = "Excellent";
-        else if (scoreValue >= 5) category = "Good";
-        else if (scoreValue >= 3) category = "Low";
-
-        const phase = moonPhaseFraction(t);
-        const moonIcon = moonPhaseIcon(phase);
-
-        hourly.push({
-          time: times[i],
-          score: { value: scoreValue, category: category },
-          cloudsPercent: cloud,
-          moonIcon: moonIcon,
-        });
+      if (bortle != null) {
+        const clamped = Math.min(9, Math.max(1, bortle));
+        return (clamped - 1) / 8;
       }
+
+      if (skyBrightness != null) {
+        const min = 18;
+        const max = 21.5;
+        const v = Math.min(max, Math.max(min, skyBrightness));
+        const norm = 1 - (v - min) / (max - min);
+        return norm;
+      }
+
+      return 0.5;
     }
-  }
 
-  if (hourly.length === 0) {
-    const fallbackTime = new Date(now + 60 * 60 * 1000).toISOString();
-    const phase = moonPhaseFraction(new Date(fallbackTime));
-    hourly.push({
-      time: fallbackTime,
-      score: { value: 3, category: "Low" },
-      cloudsPercent: 50,
-      moonIcon: moonPhaseIcon(phase),
-    });
-  }
-
-  let best = hourly[0];
-  for (let i = 1; i < hourly.length; i++) {
-    if (hourly[i].score.value > best.score.value) {
-      best = hourly[i];
-    }
-  }
-
-  const bestScore = best.score.value;
-  const bestCategory = best.score.category;
-
-  const threshold = Math.max(4, bestScore - 2);
-  let windowStart = null;
-  let windowEnd = null;
-  for (let i = 0; i < hourly.length; i++) {
-    if (hourly[i].score.value >= threshold) {
-      if (!windowStart) windowStart = hourly[i].time;
-      windowEnd = hourly[i].time;
-    }
-  }
-
-  const todayIso = new Date().toISOString().slice(0, 10);
-
-  let darknessText = "Nighttime hours not yet calculated";
-  if (
-    weatherData &&
-    weatherData.daily &&
-    Array.isArray(weatherData.daily.sunset) &&
-    Array.isArray(weatherData.daily.sunrise)
-  ) {
-    const sunsetIso = weatherData.daily.sunset[0];
-    const sunriseIso = weatherData.daily.sunrise[0];
-    darknessText =
-      "Sunset " +
-      formatLocalTimeLabel(sunsetIso, timezone) +
-      " – Sunrise " +
-      formatLocalTimeLabel(sunriseIso, timezone);
-  }
-
-  let avgCloud = 0;
-  for (let i = 0; i < hourly.length; i++) {
-    avgCloud += hourly[i].cloudsPercent;
-  }
-  avgCloud = avgCloud / hourly.length;
-  const cloudsText =
-    avgCloud < 25
-      ? "Mostly clear (" + Math.round(avgCloud) + "%)"
-      : avgCloud < 60
-      ? "Patchy cloud (" + Math.round(avgCloud) + "%)"
-      : "Cloudy (" + Math.round(avgCloud) + "%)";
-
-  const auroraActivity =
-    spaceWeather && spaceWeather.activityLabel
-      ? spaceWeather.activityLabel
-      : "Unknown";
-
-  const headline =
-    bestCategory === "Excellent"
-      ? "Excellent chance tonight"
-      : bestCategory === "Good"
-      ? "Good chance tonight"
-      : bestCategory === "Low"
-      ? "Low chance tonight"
-      : "Aurora very unlikely tonight";
-
-  const bestDirection = "North or North–Northwest";
-
-  const explanationPieces = [];
-  if (auroraActivity === "High") {
-    explanationPieces.push("Strong geomagnetic activity");
-  } else if (auroraActivity === "Moderate") {
-    explanationPieces.push("Moderate geomagnetic activity");
-  } else if (auroraActivity === "Low") {
-    explanationPieces.push("Geomagnetic activity looks low");
-  } else {
-    explanationPieces.push("Aurora activity estimate is uncertain");
-  }
-  explanationPieces.push(cloudsText.toLowerCase());
-  const explanation = explanationPieces.join(", ") + ".";
-
-  const summary = {
-    date: todayIso,
-    location: loc,
-    bestCategory: bestCategory,
-    bestScore: bestScore,
-    bestTimeWindow:
-      windowStart && windowEnd
-        ? { start: windowStart, end: windowEnd }
-        : undefined,
-    headline: headline,
-    bestDirection: bestDirection,
-    explanation: explanation,
-    conditions: {
-      auroraActivity: auroraActivity,
-      cloudsText: cloudsText,
-      moonText: "Moon phase shown per hour; altitude/horizon coming soon",
-      darknessText: darknessText,
-      lightPollutionText: "Light pollution not yet included",
-    },
-    lastUpdated: new Date().toISOString(),
-  };
-
-  return { summary: summary, hours: hourly };
-}
-
-// --- UI components ---
-
-function DataStatusBanner({ availability }) {
-  const hasIssues =
-    availability.weather !== "ok" ||
-    availability.spaceWeather !== "ok" ||
-    availability.ovation !== "ok" ||
-    availability.lightPollution !== "ok";
-
-  if (!hasIssues && availability.notes.length === 0) {
-    return null;
-  }
-
-  return React.createElement(
-    "div",
-    { className: "data-banner" },
-    React.createElement("strong", null, "Data status:"),
-    React.createElement(
-      "ul",
-      null,
-      availability.notes.map(function (note, idx) {
-        return React.createElement("li", { key: idx }, note);
-      })
-    )
-  );
-}
-
-function categoryToDisplay(bestCategory) {
-  switch (bestCategory) {
-    case "Excellent":
-      return { label: "Excellent chance", color: "#4CAF50" };
-    case "Good":
-      return { label: "Good chance", color: "#009688" };
-    case "Low":
-      return { label: "Low chance", color: "#FFC107" };
-    case "VeryUnlikely":
-    default:
-      return { label: "Very unlikely", color: "#607D8B" };
-  }
-}
-
-function Chip({ label }) {
-  return React.createElement("span", { className: "chip" }, label);
-}
-
-function TonightCard({ summary }) {
-  const display = categoryToDisplay(summary.bestCategory);
-  const label = display.label;
-  const color = display.color;
-  const timeZone = summary.location.timezone;
-
-  const bestWindow =
-    summary.bestTimeWindow &&
-    formatLocalTimeLabel(summary.bestTimeWindow.start, timeZone) +
-      " – " +
-      formatLocalTimeLabel(summary.bestTimeWindow.end, timeZone);
-
-  return React.createElement(
-    "div",
-    { className: "tonight-card" },
-    React.createElement(
-      "div",
-      { className: "tonight-card-title" },
-      "Tonight at ",
-      summary.location.name
-    ),
-    React.createElement(
-      "div",
-      { className: "tonight-card-headline", style: { color: color } },
-      label
-    ),
-    bestWindow &&
-      React.createElement(
-        "div",
-        { style: { marginBottom: 4 } },
-        "Best between ",
-        React.createElement("strong", null, bestWindow)
-      ),
-    React.createElement(
-      "div",
-      { style: { marginBottom: 4 } },
-      "Look ",
-      React.createElement("strong", null, summary.bestDirection)
-    ),
-    React.createElement(
-      "div",
-      { className: "tonight-card-text" },
-      summary.explanation
-    ),
-    React.createElement(
-      "div",
-      { className: "chip-row" },
-      React.createElement(Chip, {
-        label: "Aurora activity: " + summary.conditions.auroraActivity,
-      }),
-      React.createElement(Chip, {
-        label: "Clouds: " + summary.conditions.cloudsText,
-      }),
-      React.createElement(Chip, {
-        label: "Moon: " + summary.conditions.moonText,
-      }),
-      React.createElement(Chip, {
-        label: "Darkness: " + summary.conditions.darknessText,
-      }),
-      React.createElement(Chip, {
-        label: "Light pollution: " + summary.conditions.lightPollutionText,
-      })
-    ),
-    React.createElement(
-      "div",
-      {
-        style: {
-          marginTop: 10,
-          fontSize: 11,
-          opacity: 0.7,
-        },
-      },
-      "Last updated: ",
-      formatLocalDateTime(summary.lastUpdated, summary.location.timezone)
-    )
-  );
-}
-
-function categoryColor(category) {
-  switch (category) {
-    case "Excellent":
-      return "#4CAF50";
-    case "Good":
-      return "#009688";
-    case "Low":
-      return "#FFC107";
-    case "VeryUnlikely":
-    default:
-      return "#607D8B";
-  }
-}
-
-function Timeline({ hours, locationTimezone }) {
-  return React.createElement(
-    "div",
-    { className: "timeline" },
-    React.createElement(
-      "div",
-      { style: { fontSize: 13, marginBottom: 8 } },
-      "Next dark hours – bar: viewing chance • ☁: cloud cover • 🌙: moon phase"
-    ),
-    React.createElement(
-      "div",
-      { className: "timeline-hours" },
-      hours.map(function (h) {
-        const cloudIcon = cloudIconForPercent(h.cloudsPercent);
-        return React.createElement(
-          "div",
-          { key: h.time, className: "timeline-hour" },
-          React.createElement(
-            "div",
-            { style: { marginBottom: 4 } },
-            formatLocalTimeLabel(h.time, locationTimezone)
-          ),
-          React.createElement(
-            "div",
-            { className: "timeline-bar-outer" },
-            React.createElement("div", {
-              className: "timeline-bar-inner",
-              style: {
-                height: (h.score.value / 10) * 100 + "%",
-                background: categoryColor(h.score.category),
-              },
-            })
-          ),
-          React.createElement(
-            "div",
-            {
-              style: {
-                marginTop: 4,
-                whiteSpace: "nowrap",
-              },
-            },
-            cloudIcon,
-            " ",
-            String(Math.round(h.cloudsPercent)),
-            "%"
-          ),
-          React.createElement(
-            "div",
-            { style: { marginTop: 2 } },
-            h.moonIcon
-          )
-        );
-      })
-    )
-  );
-}
-
-function CondItem({ label, value }) {
-  return React.createElement(
-    "div",
-    null,
-    React.createElement("div", { className: "cond-label" }, label),
-    React.createElement("div", { className: "cond-value" }, value)
-  );
-}
-
-function ConditionsRow({ summary }) {
-  const c = summary.conditions;
-  return React.createElement(
-    "div",
-    { className: "conditions-row" },
-    React.createElement(CondItem, {
-      label: "Aurora activity",
-      value: c.auroraActivity,
-    }),
-    React.createElement(CondItem, {
-      label: "Clouds",
-      value: c.cloudsText,
-    }),
-    React.createElement(CondItem, {
-      label: "Moon",
-      value: c.moonText,
-    }),
-    React.createElement(CondItem, {
-      label: "Darkness",
-      value: c.darknessText,
-    }),
-    React.createElement(CondItem, {
-      label: "Light pollution",
-      value: c.lightPollutionText,
-    })
-  );
-}
-
-// --- Location chooser (manual search) ---
-
-function LocationSelector({
-  currentLocation,
-  sourceLabel,
-  onUseDeviceLocation,
-  onSelectManualLocation,
-}) {
-  const ReactRef = React;
-  const useState = ReactRef.useState;
-
-  const [query, setQuery] = useState("");
-  const [results, setResults] = useState([]);
-  const [searching, setSearching] = useState(false);
-  const [searchError, setSearchError] = useState("");
-
-  async function handleSearch(e) {
-    e.preventDefault();
-    const q = query.trim();
-    if (!q) return;
-    setSearching(true);
-    setSearchError("");
-    setResults([]);
-    try {
-      const url =
-        "https://geocoding-api.open-meteo.com/v1/search?name=" +
-        encodeURIComponent(q) +
-        "&count=5&language=en&format=json";
-      const res = await fetch(url);
-      if (!res.ok) throw new Error("Geocoding failed");
-      const data = await res.json();
-      if (!data.results || !data.results.length) {
-        setSearchError("No places found for that search.");
+    function classifyLightPollutionValue(normalized) {
+      const n = Math.min(1, Math.max(0, normalized));
+      if (n < 0.33) {
+        return { label: "Dark skies", code: "dark" };
+      } else if (n < 0.66) {
+        return { label: "Suburban skies", code: "suburban" };
       } else {
-        setResults(data.results);
+        return { label: "Urban / bright skies", code: "urban" };
       }
-    } catch (err) {
-      console.error(err);
-      setSearchError("Problem searching for that place.");
-    } finally {
-      setSearching(false);
     }
-  }
 
-  function handleSelectPlace(place) {
-    const loc = {
-      id: "manual-" + place.id,
-      name: place.name,
-      country: place.country || "",
-      region: place.admin1 || "",
-      latitude: place.latitude,
-      longitude: place.longitude,
-      timezone: place.timezone || "UTC",
-      source: "manual",
-      sourceHint: "manual",
+    async function getLightPollution(lat, lon) {
+      let heuristicNorm = 0.5;
+
+      if (typeof lat === "number" && typeof lon === "number") {
+        const absLat = Math.abs(lat);
+        if (absLat > 66) {
+          heuristicNorm = 0.22;
+        } else if (absLat > 58) {
+          heuristicNorm = 0.32;
+        } else if (absLat > 50) {
+          heuristicNorm = 0.42;
+        } else if (absLat > 40) {
+          heuristicNorm = 0.58;
+        } else {
+          heuristicNorm = 0.72;
+        }
+
+        const absLon = Math.abs(lon);
+        if (absLon > 150 || absLon < 20) {
+          heuristicNorm -= 0.05;
+        }
+      }
+
+      const normalized = Math.min(1, Math.max(0, heuristicNorm));
+      const classification = classifyLightPollutionValue(normalized);
+
+      return {
+        source: "fallback",
+        normalized,
+        classification,
+        bortleClass: undefined,
+        skyBrightness: undefined
+      };
+    }
+
+    return {
+      normalizeLightPollution,
+      classifyLightPollutionValue,
+      getLightPollution
     };
-    onSelectManualLocation(loc);
-    setResults([]);
-    setSearchError("");
-  }
+  })();
 
-  return React.createElement(
-    "div",
-    {
-      style: {
-        marginBottom: 12,
-        padding: 8,
-        borderRadius: 8,
-        background: "#0e1620",
-        color: "#cfd8dc",
-        fontSize: 12,
-      },
-    },
-    React.createElement(
-      "div",
-      { style: { marginBottom: 4 } },
-      "Location: ",
-      React.createElement(
-        "strong",
-        null,
-        currentLocation
-          ? currentLocation.name +
-              (currentLocation.country ? " • " + currentLocation.country : "")
-          : "Loading..."
-      )
-    ),
-    React.createElement(
-      "div",
-      { style: { marginBottom: 8, color: "#90a4ae" } },
-      sourceLabel
-    ),
-    React.createElement(
-      "form",
-      {
-        onSubmit: handleSearch,
-        style: {
-          display: "flex",
-          gap: 6,
-          marginBottom: 6,
-        },
-      },
-      React.createElement("input", {
-        type: "text",
-        placeholder: "Search place…",
-        value: query,
-        onChange: function (e) {
-          setQuery(e.target.value);
-        },
-        style: {
-          flex: 1,
-          padding: "4px 6px",
-          borderRadius: 6,
-          border: "1px solid #37474f",
-          background: "#020712",
-          color: "#eceff1",
-        },
-      }),
-      React.createElement(
-        "button",
-        {
-          type: "submit",
-          disabled: searching,
-          style: {
-            padding: "4px 8px",
-            borderRadius: 6,
-            border: "1px solid #546e7a",
-            background: "#263238",
-            color: "#eceff1",
-            cursor: "pointer",
-          },
-        },
-        searching ? "Searching…" : "Search"
-      )
-    ),
-    React.createElement(
-      "button",
-      {
-        type: "button",
-        onClick: onUseDeviceLocation,
-        style: {
-          padding: "4px 8px",
-          borderRadius: 6,
-          border: "1px solid #546e7a",
-          background: "#1b2836",
-          color: "#eceff1",
-          cursor: "pointer",
-          fontSize: 11,
-          marginBottom: 6,
-        },
-      },
-      "Use device GPS / IP"
-    ),
-    searchError &&
-      React.createElement(
-        "div",
-        { style: { color: "#ef9a9a", marginBottom: 4 } },
-        searchError
-      ),
-    results.length > 0 &&
-      React.createElement(
-        "div",
-        {
-          style: {
-            marginTop: 4,
-            borderTop: "1px solid #263238",
-            paddingTop: 4,
-          },
-        },
-        results.map(function (place) {
-          return React.createElement(
-            "div",
-            {
-              key: place.id,
-              onClick: function () {
-                handleSelectPlace(place);
-              },
-              style: {
-                padding: "4px 2px",
-                cursor: "pointer",
-              },
-            },
-            place.name,
-            place.country ? " • " + place.country : "",
-            place.admin1 ? " (" + place.admin1 + ")" : ""
-          );
-        })
-      )
-  );
-}
+  // -------- Aurora brain module --------
+  const AuroraBrain = (function () {
+    function kpScore(kp) {
+      const k = Math.min(9, Math.max(0, Number(kp) || 0));
+      return (k / 9) * 60;
+    }
 
-// --- Screen + App ---
+    function locationScore(distanceToOvalKm) {
+      const maxDist = 1500;
+      const d = Math.min(maxDist, Math.max(0, Number(distanceToOvalKm) || 0));
+      return 30 * (1 - d / maxDist);
+    }
 
-function TonightScreen() {
-  const ReactRef = React;
-  const useState = ReactRef.useState;
-  const useEffect = ReactRef.useEffect;
+    function lightPollutionPenalty(lightPollution, kp) {
+      const lp = Math.min(1, Math.max(0, Number(lightPollution) || 0));
+      const basePenalty = 30 * lp;
 
-  const [currentLocation, setCurrentLocation] = useState(null);
-  const [sourceLabel, setSourceLabel] = useState("");
-  const [summary, setSummary] = useState(null);
-  const [hours, setHours] = useState([]);
-  const [availability, setAvailability] = useState({
-    weather: "ok",
-    spaceWeather: "ok",
-    ovation: "missing",
-    lightPollution: "missing",
-    notes: [],
-  });
-  const [error, setError] = useState(null);
-  const [loading, setLoading] = useState(true);
+      const k = Math.min(9, Math.max(0, Number(kp) || 0));
+      const kpReliefFactor = Math.min(1, k / 7);
+      const effectivePenalty = basePenalty * (1 - kpReliefFactor * 0.7);
 
-  // Initial location: from saved manual, otherwise auto (GPS/IP/Rum)
-  useEffect(function () {
-    let cancelled = false;
+      return effectivePenalty;
+    }
 
-    async function initLocation() {
+    function timeOfNightAdjustment(timeLocalHour) {
+      if (typeof timeLocalHour !== "number") return 0;
+      const h = ((timeLocalHour % 24) + 24) % 24;
+
+      if (h >= 22 || h < 2) return +5;
+      if ((h >= 3 && h <= 4) || (h >= 20 && h <= 21)) return +2;
+      if (h >= 9 && h <= 17) return -10;
+      return 0;
+    }
+
+    function computeBrain(inputs) {
+      const {
+        kp,
+        distanceToOvalKm,
+        geomagneticLatitude,
+        lightPollution,
+        cloudCover,
+        timeLocalHour
+      } = inputs;
+
+      const debug = [];
+
+      const sKp = kpScore(kp);
+      debug.push(`KP index ${kp} contributes ${sKp.toFixed(1)} points.`);
+
+      const sLoc = locationScore(distanceToOvalKm);
+      debug.push(
+        `Your position relative to the auroral oval contributes ${sLoc.toFixed(
+          1
+        )} points.`
+      );
+
+      const lpPenalty = lightPollutionPenalty(lightPollution, kp);
+      if (lightPollution < 0.33) {
+        debug.push(
+          `Dark skies – only a small light pollution penalty (${lpPenalty.toFixed(
+            1
+          )} points).`
+        );
+      } else if (lightPollution < 0.66) {
+        debug.push(
+          `Moderate light pollution – medium penalty (${lpPenalty.toFixed(
+            1
+          )} points).`
+        );
+      } else {
+        debug.push(
+          `Bright urban skies – heavy light pollution penalty (${lpPenalty.toFixed(
+            1
+          )} points).`
+        );
+      }
+
+      let score = sKp + sLoc - lpPenalty;
+
+      if (typeof cloudCover === "number") {
+        const cc = Math.min(1, Math.max(0, cloudCover));
+        const cloudPenalty = 25 * cc;
+        score -= cloudPenalty;
+        debug.push(
+          `Cloud cover reduces the score by ${cloudPenalty.toFixed(
+            1
+          )} points (cover: ${(cc * 100).toFixed(0)}%).`
+        );
+      }
+
+      const timeAdj = timeOfNightAdjustment(timeLocalHour);
+      if (timeAdj !== 0) {
+        score += timeAdj;
+        debug.push(
+          `Local time adjustment of ${timeAdj.toFixed(
+            1
+          )} points based on ${timeLocalHour}:00.`
+        );
+      }
+
+      score = Math.max(0, Math.min(100, score));
+
+      let verdict;
+      if (score >= 65) {
+        verdict = "yes";
+      } else if (score >= 35) {
+        verdict = "maybe";
+      } else {
+        verdict = "no";
+      }
+
+      debug.push(
+        `Final visibility score is ${score.toFixed(
+          0
+        )} / 100 → verdict: ${verdict.toUpperCase()}.`
+      );
+
+      return {
+        score,
+        verdict,
+        debug,
+        kpScore: sKp,
+        locationScore: sLoc,
+        lightPollutionPenalty: lpPenalty,
+        geomagneticLatitude
+      };
+    }
+
+    return {
+      kpScore,
+      locationScore,
+      lightPollutionPenalty,
+      timeOfNightAdjustment,
+      computeBrain
+    };
+  })();
+
+  // -------- App wiring --------
+
+  function initApp() {
+    const locMainEl = document.getElementById("location-main");
+    const locDetailEl = document.getElementById("location-detail");
+    const locMetaEl = document.getElementById("location-meta");
+    const lpBadgeEl = document.querySelector("[data-role='light-pollution-badge']");
+    const lpIndicatorInner = lpBadgeEl.querySelector(".lp-indicator-inner");
+    const kpInputEl = document.getElementById("kp-input");
+    const kpValueEl = document.getElementById("kp-value");
+    const verdictContainer = document.querySelector("[data-role='aurora-verdict']");
+    const verdictTextEl = document.getElementById("verdict-text");
+    const verdictScoreEl = document.getElementById("verdict-score");
+    const debugListEl = document.querySelector("[data-role='aurora-debug']");
+    const footerTimeEl = document.getElementById("footer-time");
+    const searchInputEl = document.getElementById("search-input");
+    const searchButtonEl = document.getElementById("search-button");
+    const gpsButtonEl = document.getElementById("gps-button");
+
+    // Tonight / classic panels
+    const tonightTitleEl = document.getElementById("tonight-title");
+    const tonightLocationSubEl = document.getElementById("tonight-location-sub");
+    const tonightChanceEl = document.getElementById("tonight-chance");
+    const tonightGeomagEl = document.getElementById("tonight-geomag");
+    const chipAuroraEl = document.getElementById("chip-aurora");
+
+    const state = {
+      lat: null,
+      lon: null,
+      geomagneticLatitude: null,
+      distanceToOvalKm: null,
+      lightPollution: 0.5,
+      kp: parseFloat(kpInputEl.value) || 3.5,
+      cloudCover: null,
+      locationShort: "your location"
+    };
+
+    function updateFooterTime() {
+      const now = new Date();
+      const timeStr = now.toLocaleString(undefined, {
+        weekday: "short",
+        hour: "2-digit",
+        minute: "2-digit"
+      });
+      footerTimeEl.textContent = `Local time detected as ${timeStr}.`;
+    }
+
+    function approxGeomagneticLatitude(lat) {
+      if (typeof lat !== "number") return null;
+      return lat - 11;
+    }
+
+    function approxDistanceToOvalKm(geomagLat) {
+      if (typeof geomagLat !== "number") return null;
+      const ovalLat = 67;
+      const deltaLat = Math.abs(geomagLat - ovalLat);
+      return deltaLat * 111;
+    }
+
+    function setLocationDisplay(options) {
+      const {
+        labelMain,
+        labelDetail,
+        sourceLabel,
+        sourceKind,
+        coordsText,
+        shortLabel
+      } = options;
+
+      if (labelMain) locMainEl.textContent = labelMain;
+      if (labelDetail) locDetailEl.textContent = labelDetail;
+
+      state.locationShort = shortLabel || labelMain || "your location";
+
+      locMetaEl.innerHTML = "";
+      const src = document.createElement("span");
+      src.className = "meta-pill";
+      src.textContent = `Source: ${sourceLabel}`;
+      locMetaEl.appendChild(src);
+
+      if (coordsText) {
+        const coords = document.createElement("span");
+        coords.className = "meta-pill";
+        coords.textContent = coordsText;
+        locMetaEl.appendChild(coords);
+      }
+
+      if (sourceKind === "ip") {
+        src.style.borderColor = "rgba(234,179,8,0.9)";
+      } else if (sourceKind === "gps") {
+        src.style.borderColor = "rgba(34,197,94,0.9)";
+      } else if (sourceKind === "search") {
+        src.style.borderColor = "rgba(56,189,248,0.9)";
+      }
+
+      tonightTitleEl.textContent = `Tonight at ${state.locationShort}`;
+      tonightLocationSubEl.textContent =
+        "Tonight’s view based on current KP and a simple sky model.";
+    }
+
+    function renderLightPollutionBadge(lpResult) {
+      if (!lpBadgeEl) return;
+
+      if (!lpResult) {
+        lpBadgeEl.className = "lp-badge lp-badge-unknown";
+        lpBadgeEl.title =
+          "Light pollution estimate is unavailable – using a default middle-of-the-road value.";
+        lpBadgeEl.querySelector(".lp-badge-label-strong").textContent =
+          "Light pollution:";
+        lpBadgeEl.querySelector(".lp-badge-label").textContent = "unknown";
+        lpIndicatorInner.style.height = "50%";
+        return;
+      }
+
+      const { normalized, classification } = lpResult;
+      lpBadgeEl.className = `lp-badge lp-badge-${classification.code}`;
+      lpBadgeEl.querySelector(".lp-badge-label-strong").textContent =
+        "Light pollution:";
+      lpBadgeEl.querySelector(".lp-badge-label").textContent =
+        classification.label;
+      lpBadgeEl.title = `Normalized light pollution: ${(
+        normalized * 100
+      ).toFixed(0)} / 100 (0 = dark, 100 = very bright)`;
+
+      const darkHeight = 10;
+      const brightHeight = 90;
+      const height = darkHeight + (brightHeight - darkHeight) * normalized;
+      lpIndicatorInner.style.height = `${height}%`;
+    }
+
+    function updateTonightSummary(result) {
+      let label = "Low chance";
+      let cls = "chance-low";
+
+      if (result.verdict === "yes") {
+        label = "Good chance";
+        cls = "chance-high";
+      } else if (result.verdict === "maybe") {
+        label = "Low to moderate chance";
+        cls = "chance-medium";
+      }
+
+      tonightChanceEl.textContent = label;
+      tonightChanceEl.className = `tonight-chance ${cls}`;
+
+      const kp = state.kp;
+      let activityText = "Low";
+      if (kp >= 7) activityText = "Very high";
+      else if (kp >= 5) activityText = "High";
+      else if (kp >= 3.5) activityText = "Moderate";
+
+      chipAuroraEl.textContent = activityText;
+
+      tonightGeomagEl.textContent =
+        `KP index ${kp.toFixed(1)} with your latitude gives a ` +
+        `${activityText.toLowerCase()} level of geomagnetic activity; ` +
+        `clouds and moonlight are still placeholders here.`;
+    }
+
+    function renderAuroraVerdict(result) {
+      const { verdict, score, debug } = result;
+
+      verdictContainer.dataset.state = verdict;
+
+      if (verdict === "yes") {
+        verdictTextEl.textContent =
+          "Conditions look good – you have a solid chance of seeing aurora from here. 🌌";
+      } else if (verdict === "maybe") {
+        verdictTextEl.textContent =
+          "It’s possible, but conditions are borderline. A darker spot or higher KP would really help.";
+      } else {
+        verdictTextEl.textContent =
+          "It’s unlikely right now. You’d need much stronger activity or darker skies.";
+      }
+
+      verdictScoreEl.textContent = `Score ${score.toFixed(0)} / 100`;
+
+      if (debugListEl) {
+        debugListEl.innerHTML = "";
+        debug.forEach((line) => {
+          const li = document.createElement("li");
+          li.textContent = line;
+          debugListEl.appendChild(li);
+        });
+      }
+
+      updateTonightSummary(result);
+    }
+
+    function recomputeAurora() {
+      if (state.lat == null || state.lon == null) {
+        verdictTextEl.textContent =
+          "We’re still waiting for a location before we can score your chances.";
+        verdictScoreEl.textContent = "Score — / 100";
+        verdictContainer.dataset.state = "";
+        return;
+      }
+
+      const now = new Date();
+      const localHour = now.getHours();
+
+      const geomagLat =
+        state.geomagneticLatitude != null
+          ? state.geomagneticLatitude
+          : approxGeomagneticLatitude(state.lat);
+      const distanceKm =
+        state.distanceToOvalKm != null
+          ? state.distanceToOvalKm
+          : approxDistanceToOvalKm(geomagLat);
+
+      state.geomagneticLatitude = geomagLat;
+      state.distanceToOvalKm = distanceKm;
+
+      const result = AuroraBrain.computeBrain({
+        kp: state.kp,
+        distanceToOvalKm: distanceKm,
+        geomagneticLatitude: geomagLat,
+        lightPollution: state.lightPollution,
+        cloudCover: state.cloudCover,
+        timeLocalHour: localHour
+      });
+
+      renderAuroraVerdict(result);
+    }
+
+    function onKpChange() {
+      const val = parseFloat(kpInputEl.value) || 0;
+      state.kp = val;
+      kpValueEl.textContent = `KP ${val.toFixed(1)}`;
+      recomputeAurora();
+    }
+
+    async function updateLightPollution(lat, lon) {
       try {
-        const saved = localStorage.getItem("a2kda_location");
-        if (saved) {
-          const loc = JSON.parse(saved);
-          if (!cancelled) {
-            loc.sourceHint = "manual";
-            setCurrentLocation(loc);
-            setSourceLabel("Location from your saved location");
+        const result = await LightPollution.getLightPollution(lat, lon);
+        state.lightPollution = result.normalized;
+        renderLightPollutionBadge(result);
+        recomputeAurora();
+      } catch (err) {
+        console.error("Failed to estimate light pollution", err);
+        state.lightPollution = 0.5;
+        renderLightPollutionBadge(null);
+        recomputeAurora();
+      }
+    }
+
+    function useIpLocationFallback() {
+      fetch("https://ipapi.co/json/")
+        .then((res) => res.json())
+        .then((data) => {
+          const city = data.city || "your area";
+          const country = data.country_name || data.country || "your country";
+          const lat = typeof data.latitude === "number" ? data.latitude : data.lat;
+          const lon =
+            typeof data.longitude === "number" ? data.longitude : data.lon;
+
+          state.lat = typeof lat === "number" ? lat : null;
+          state.lon = typeof lon === "number" ? lon : null;
+
+          const coordsText =
+            state.lat != null && state.lon != null
+              ? `Approx. ${state.lat.toFixed(2)}°, ${state.lon.toFixed(2)}°`
+              : null;
+
+          setLocationDisplay({
+            labelMain: `Near ${city} \u2022 ${country}`,
+            labelDetail: "Location estimated from your network (IP).",
+            sourceLabel: "IP-based (approximate)",
+            sourceKind: "ip",
+            coordsText,
+            shortLabel: `Near ${city}`
+          });
+
+          if (state.lat != null && state.lon != null) {
+            updateLightPollution(state.lat, state.lon);
+          } else {
+            recomputeAurora();
+          }
+        })
+        .catch((err) => {
+          console.error("IP location failed", err);
+          setLocationDisplay({
+            labelMain: "Couldn’t determine your location.",
+            labelDetail:
+              "We couldn’t get GPS or IP information. Try refreshing or checking location permissions.",
+            sourceLabel: "Unavailable",
+            sourceKind: "unknown",
+            coordsText: null
+          });
+          renderLightPollutionBadge(null);
+          recomputeAurora();
+        });
+    }
+
+    function initLocationViaGps() {
+      if (!navigator.geolocation) {
+        useIpLocationFallback();
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const { latitude, longitude, accuracy } = pos.coords;
+          state.lat = latitude;
+          state.lon = longitude;
+
+          const coordsText = `${latitude.toFixed(3)}°, ${longitude.toFixed(
+            3
+          )}° (±${Math.round(accuracy)} m)`;
+
+          setLocationDisplay({
+            labelMain: "Location from your device",
+            labelDetail:
+              "Using your device’s location services. This is typically accurate to a few hundred metres.",
+            sourceLabel: "Device location (precise)",
+            sourceKind: "gps",
+            coordsText,
+            shortLabel: "Your device location"
+          });
+
+          updateLightPollution(latitude, longitude);
+        },
+        (err) => {
+          console.warn("Geolocation failed, falling back to IP", err);
+          useIpLocationFallback();
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 8000,
+          maximumAge: 600000
+        }
+      );
+    }
+
+    function geocodeSearch(query) {
+      const url =
+        "https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=" +
+        encodeURIComponent(query);
+
+      searchButtonEl.disabled = true;
+      fetch(url, { headers: { "Accept-Language": "en" } })
+        .then((res) => res.json())
+        .then((results) => {
+          if (!results || !results.length) {
+            alert("No results found for that place.");
             return;
           }
-        }
 
-        const autoLoc = await getAutoLocation();
-        if (!cancelled) {
-          if (autoLoc.sourceHint === "gps") {
-            setSourceLabel("Location from your device GPS");
-          } else if (autoLoc.sourceHint === "ip") {
-            setSourceLabel("Location estimated from your network (IP)");
-          } else if (autoLoc.sourceHint === "rum-default") {
-            setSourceLabel(
-              "Default dark-sky location (Isle of Rùm, Scotland)"
-            );
-          }
-          setCurrentLocation(autoLoc);
-        }
-      } catch (e) {
-        console.error(e);
-        if (!cancelled) {
-          const fallback = rumFallbackLocation();
-          setCurrentLocation(fallback);
-          setSourceLabel(
-            "Default dark-sky location (Isle of Rùm, Scotland)"
-          );
-        }
-      }
+          const r = results[0];
+          const lat = parseFloat(r.lat);
+          const lon = parseFloat(r.lon);
+
+          state.lat = lat;
+          state.lon = lon;
+
+          const name = r.display_name.split(",")[0];
+          const coordsText = `${lat.toFixed(3)}°, ${lon.toFixed(3)}°`;
+
+          setLocationDisplay({
+            labelMain: name,
+            labelDetail: "Location chosen via search.",
+            sourceLabel: "Manual search",
+            sourceKind: "search",
+            coordsText,
+            shortLabel: name
+          });
+
+          updateLightPollution(lat, lon);
+        })
+        .catch((err) => {
+          console.error("Search failed", err);
+          alert("Search failed – please try again or use GPS / IP.");
+        })
+        .finally(() => {
+          searchButtonEl.disabled = false;
+        });
     }
 
-    initLocation();
+    function init() {
+      updateFooterTime();
+      kpInputEl.addEventListener("input", onKpChange);
 
-    return function () {
-      cancelled = true;
-    };
-  }, []);
+      gpsButtonEl.addEventListener("click", () => {
+        initLocationViaGps();
+      });
 
-  // When location changes, load data
-  useEffect(
-    function () {
-      if (!currentLocation) return;
+      searchButtonEl.addEventListener("click", () => {
+        const q = searchInputEl.value.trim();
+        if (!q) return;
+        geocodeSearch(q);
+      });
 
-      let cancelled = false;
-
-      async function loadForLocation() {
-        setLoading(true);
-        setError(null);
-
-        /** @type {DataAvailability} */
-        let avail = {
-          weather: "ok",
-          spaceWeather: "ok",
-          ovation: "missing",
-          lightPollution: "missing",
-          notes: [
-            "Light pollution and detailed moon altitude are not yet included in the calculations.",
-          ],
-        };
-
-        if (currentLocation.sourceHint === "ip") {
-          avail.notes.push(
-            "Your approximate location was estimated from your internet connection."
-          );
-        } else if (currentLocation.sourceHint === "rum-default") {
-          avail.notes.push(
-            "We couldn't get your device or IP-based location; using a default dark-sky location on the Isle of Rùm, Scotland."
-          );
-        } else if (currentLocation.sourceHint === "manual") {
-          avail.notes.push(
-            "Using your manually chosen location for all calculations."
-          );
+      searchInputEl.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          const q = searchInputEl.value.trim();
+          if (!q) return;
+          geocodeSearch(q);
         }
+      });
 
-        try {
-          let weatherData = null;
-          try {
-            weatherData = await fetchWeather(currentLocation);
-          } catch (e) {
-            console.error(e);
-            avail.weather = "missing";
-            avail.notes.push(
-              "Weather data is unavailable; cloud cover is not included in tonight's estimate."
-            );
-          }
+      // Start with IP fallback; GPS button lets user override
+      useIpLocationFallback();
+      onKpChange();
+    }
 
-          let spaceWeather = null;
-          try {
-            spaceWeather = await fetchSpaceWeather();
-          } catch (e) {
-            console.error(e);
-            avail.spaceWeather = "missing";
-            avail.notes.push(
-              "Space weather data is unavailable; aurora activity is assumed to be low."
-            );
-          }
-
-          const result = buildForecast(
-            currentLocation,
-            weatherData,
-            spaceWeather
-          );
-
-          if (!cancelled) {
-            setAvailability(avail);
-            setSummary(result.summary);
-            setHours(result.hours);
-            setLoading(false);
-          }
-        } catch (e) {
-          console.error(e);
-          if (!cancelled) {
-            setError("Something went wrong while loading data.");
-            setLoading(false);
-          }
-        }
-      }
-
-      loadForLocation();
-
-      return function () {
-        cancelled = true;
-      };
-    },
-    [currentLocation]
-  );
-
-  function handleUseDeviceLocation() {
-    // Clear saved manual location and re-run auto
-    localStorage.removeItem("a2kda_location");
-    setCurrentLocation(null);
-    setSummary(null);
-    setHours([]);
-    setLoading(true);
-    setError(null);
-    // Will re-run initial location effect
-    getAutoLocation().then(function (autoLoc) {
-      if (autoLoc.sourceHint === "gps") {
-        setSourceLabel("Location from your device GPS");
-      } else if (autoLoc.sourceHint === "ip") {
-        setSourceLabel("Location estimated from your network (IP)");
-      } else if (autoLoc.sourceHint === "rum-default") {
-        setSourceLabel("Default dark-sky location (Isle of Rùm, Scotland)");
-      }
-      setCurrentLocation(autoLoc);
-    });
+    init();
   }
 
-  function handleSelectManualLocation(loc) {
-    localStorage.setItem("a2kda_location", JSON.stringify(loc));
-    setCurrentLocation(loc);
-    setSourceLabel("Location from your manually chosen place");
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initApp);
+  } else {
+    initApp();
   }
-
-  if (loading || !currentLocation || !summary) {
-    return React.createElement(
-      "div",
-      { className: "loading" },
-      "Loading tonight's aurora information for your location..."
-    );
-  }
-
-  if (error) {
-    return React.createElement(
-      "div",
-      { className: "error" },
-      "Sorry, we couldn't load tonight's aurora information right now."
-    );
-  }
-
-  return React.createElement(
-    "div",
-    { className: "app-container" },
-    React.createElement(
-      "header",
-      { style: { marginBottom: 12 } },
-      React.createElement(
-        "div",
-        { className: "app-header-title" },
-        "A2KDA Aurora"
-      )
-    ),
-    React.createElement(LocationSelector, {
-      currentLocation: currentLocation,
-      sourceLabel: sourceLabel,
-      onUseDeviceLocation: handleUseDeviceLocation,
-      onSelectManualLocation: handleSelectManualLocation,
-    }),
-    React.createElement(DataStatusBanner, { availability: availability }),
-    React.createElement(TonightCard, { summary: summary }),
-    React.createElement(Timeline, {
-      hours: hours,
-      locationTimezone: summary.location.timezone,
-    }),
-    React.createElement(ConditionsRow, { summary: summary }),
-    React.createElement(
-      "div",
-      { className: "tip" },
-      React.createElement("strong", null, "Tip: "),
-      "Give your eyes 20–30 minutes to adjust to the dark and avoid bright white screens while watching for aurora."
-    )
-  );
-}
-
-function App() {
-  return React.createElement(
-    "div",
-    { className: "app-shell" },
-    React.createElement(TonightScreen, null)
-  );
-}
-
-// Mount the React app
-const rootElement = document.getElementById("root");
-const root = ReactDOM.createRoot(rootElement);
-root.render(React.createElement(App));
+})();
