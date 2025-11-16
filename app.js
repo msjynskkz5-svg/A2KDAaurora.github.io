@@ -1,6 +1,7 @@
 // A2KDA Aurora - main app logic
 // - LightPollution module
 // - AuroraBrain scoring
+// - Simple solar darkness model
 // - App wiring (location, KP slider, panels, sky brightness override)
 
 (function () {
@@ -304,6 +305,160 @@
     };
   })();
 
+  // -------- Simple solar darkness model --------
+
+  function toRad(deg) {
+    return (deg * Math.PI) / 180;
+  }
+
+  function toDeg(rad) {
+    return (rad * 180) / Math.PI;
+  }
+
+  function dayOfYear(date) {
+    const start = new Date(date.getFullYear(), 0, 1);
+    const diff = date - start;
+    return Math.floor(diff / 86400000) + 1;
+  }
+
+  function wrapHour(h) {
+    let v = h % 24;
+    if (v < 0) v += 24;
+    return v;
+  }
+
+  function isHourBetween(h, start, end) {
+    if (start == null || end == null) return false;
+    h = wrapHour(h);
+    start = wrapHour(start);
+    end = wrapHour(end);
+    if (start === end) return false;
+    if (start < end) {
+      return h >= start && h < end;
+    } else {
+      return h >= start || h < end;
+    }
+  }
+
+  function formatHourLocal(h) {
+    if (h == null || !isFinite(h)) return "";
+    const wh = wrapHour(h);
+    const hour = Math.floor(wh);
+    const minutes = Math.round((wh - hour) * 60);
+    const hh = hour.toString().padStart(2, "0");
+    const mm = minutes.toString().padStart(2, "0");
+    return `${hh}:${mm}`;
+  }
+
+  function computeDarknessInfo(lat, lon, date) {
+    if (typeof lat !== "number" || typeof lon !== "number") return null;
+    if (!isFinite(lat) || !isFinite(lon)) return null;
+
+    const d = date || new Date();
+    const N = dayOfYear(d);
+    const latRad = toRad(lat);
+    const decl = toRad(
+      23.45 * Math.sin(toRad((360 * (284 + N)) / 365))
+    );
+
+    // Approximate solar noon using longitude and local timezone
+    const tzOffsetHours = -d.getTimezoneOffset() / 60; // e.g. +1 for CET
+    const centralMeridian = tzOffsetHours * 15; // degrees
+    const solarNoon = 12 + (centralMeridian - lon) / 15; // local clock hours
+
+    function hourAngleForAltitude(h0Deg) {
+      const h0 = toRad(h0Deg);
+      const cosH =
+        (Math.sin(h0) - Math.sin(latRad) * Math.sin(decl)) /
+        (Math.cos(latRad) * Math.cos(decl));
+
+      if (cosH < -1) {
+        // Sun always above this altitude (relative to this threshold)
+        return { alwaysAbove: true, exists: false };
+      }
+      if (cosH > 1) {
+        // Sun always below this altitude
+        return { alwaysBelow: true, exists: false };
+      }
+
+      const H = Math.acos(cosH);
+      const Hdeg = toDeg(H);
+      return { exists: true, Hdeg };
+    }
+
+    // Sunrise / sunset (~ upper limb, includes refraction)
+    const sun0 = hourAngleForAltitude(-0.833);
+    let sunrise = null;
+    let sunset = null;
+    let hasDay = false;
+    let alwaysDaylight = false;
+    let alwaysNight = false;
+
+    if (sun0.exists) {
+      const Hsun = sun0.Hdeg;
+      sunrise = wrapHour(solarNoon - Hsun / 15);
+      sunset = wrapHour(solarNoon + Hsun / 15);
+      hasDay = true;
+    } else if (sun0.alwaysAbove) {
+      alwaysDaylight = true;
+    } else if (sun0.alwaysBelow) {
+      alwaysNight = true;
+    }
+
+    // Astronomical darkness (Sun 18° below horizon)
+    const astro = hourAngleForAltitude(-18);
+    let astroDawn = null;
+    let astroDusk = null;
+    let hasAstronomicalNight = false;
+    let neverDark = false;
+    let alwaysAstronomicalDark = false;
+
+    if (astro.exists) {
+      const Hastro = astro.Hdeg;
+      astroDawn = wrapHour(solarNoon - Hastro / 15);
+      astroDusk = wrapHour(solarNoon + Hastro / 15);
+      hasAstronomicalNight = true;
+    } else if (astro.alwaysAbove) {
+      // Sun never 18° below horizon → no full astronomical night
+      neverDark = true;
+    } else if (astro.alwaysBelow) {
+      // Sun always deeper than 18° → essentially full darkness
+      alwaysAstronomicalDark = true;
+    }
+
+    const hourNow = d.getHours() + d.getMinutes() / 60;
+    let isDaylightNow = false;
+
+    if (hasDay) {
+      isDaylightNow = isHourBetween(hourNow, sunrise, sunset);
+    } else if (alwaysDaylight) {
+      isDaylightNow = true;
+    }
+
+    let isDarkNow = false;
+    if (alwaysAstronomicalDark) {
+      isDarkNow = true;
+    } else if (hasAstronomicalNight) {
+      isDarkNow = isHourBetween(hourNow, astroDusk, astroDawn);
+    }
+
+    return {
+      date: d,
+      sunrise,
+      sunset,
+      astroDawn,
+      astroDusk,
+      hasDay,
+      alwaysDaylight,
+      alwaysNight,
+      hasAstronomicalNight,
+      neverDark,
+      alwaysAstronomicalDark,
+      isDaylightNow,
+      isDarkNow
+    };
+  }
+
   // -------- App wiring --------
 
   function initApp() {
@@ -331,6 +486,8 @@
     const tonightChanceEl = document.getElementById("tonight-chance");
     const tonightGeomagEl = document.getElementById("tonight-geomag");
     const chipAuroraEl = document.getElementById("chip-aurora");
+    const chipDarknessEl = document.getElementById("chip-darkness");
+    const detailDarknessEl = document.getElementById("detail-darkness");
 
     const state = {
       lat: null,
@@ -342,7 +499,8 @@
       lpMode: "auto", // 'auto' | 'dark' | 'suburban' | 'urban'
       kp: parseFloat(kpInputEl.value) || 3.5,
       cloudCover: null,
-      locationShort: "your location"
+      locationShort: "your location",
+      darkness: null
     };
 
     function updateFooterTime() {
@@ -440,6 +598,46 @@
       lpIndicatorInner.style.height = `${height}%`;
     }
 
+    function updateDarknessUI(darkness) {
+      if (!chipDarknessEl || !detailDarknessEl || !darkness) return;
+
+      if (darkness.alwaysAstronomicalDark || (darkness.alwaysNight && !darkness.neverDark)) {
+        chipDarknessEl.textContent = "Dark all day at this time of year.";
+        detailDarknessEl.textContent =
+          "At your latitude and on this date the Sun stays well below the horizon, so the sky is effectively dark all day. Aurora visibility will be limited mainly by weather and light pollution.";
+      } else if (darkness.neverDark) {
+        chipDarknessEl.textContent = "Sky never gets fully dark tonight.";
+        detailDarknessEl.textContent =
+          "The Sun never reaches full astronomical darkness (18° below the horizon) at this time of year. Very bright aurora may still be visible in the darkest hours.";
+      } else if (darkness.hasAstronomicalNight) {
+        const start = formatHourLocal(darkness.astroDusk);
+        const end = formatHourLocal(darkness.astroDawn);
+        chipDarknessEl.textContent = `Dark enough from about ${start}–${end}.`;
+
+        const sunriseStr =
+          darkness.sunrise != null ? formatHourLocal(darkness.sunrise) : null;
+        const sunsetStr =
+          darkness.sunset != null ? formatHourLocal(darkness.sunset) : null;
+        let extra = "";
+        if (sunsetStr && sunriseStr) {
+          extra = ` (sunset ${sunsetStr}, sunrise ${sunriseStr})`;
+        }
+
+        detailDarknessEl.textContent =
+          `We approximate astronomical-night when the Sun is 18° below the horizon. For today that gives a dark window from about ${start}–${end}${extra}. Times are approximate.`;
+      } else if (darkness.hasDay) {
+        const sunriseStr = formatHourLocal(darkness.sunrise);
+        const sunsetStr = formatHourLocal(darkness.sunset);
+        chipDarknessEl.textContent = `Roughly dark between sunset ${sunsetStr} and sunrise ${sunriseStr}.`;
+        detailDarknessEl.textContent =
+          "We estimate sunrise and sunset with a simple solar model based on your latitude, longitude and date. In a future version we’ll refine twilight handling further.";
+      } else {
+        chipDarknessEl.textContent = "Darkness timings unavailable.";
+        detailDarknessEl.textContent =
+          "We couldn’t estimate darkness timings for this location and date.";
+      }
+    }
+
     function updateTonightSummary(result) {
       let label = "Low chance";
       let cls = "chance-low";
@@ -469,16 +667,25 @@
         `clouds and moonlight are still placeholders here.`;
     }
 
-    function renderAuroraVerdict(result, options) {
+    function renderAuroraVerdict(result, context) {
       const { verdict, score, debug } = result;
       const localHour =
-        options && typeof options.localHour === "number"
-          ? options.localHour
+        context && typeof context.localHour === "number"
+          ? context.localHour
           : null;
+      const darkness = context && context.darkness ? context.darkness : null;
+
+      let isDaytime = false;
+      if (darkness) {
+        isDaytime = !!darkness.isDaylightNow;
+      } else if (localHour !== null) {
+        const hour = ((localHour % 24) + 24) % 24;
+        isDaytime = hour >= 7 && hour < 17;
+      }
 
       verdictContainer.dataset.state = verdict;
 
-      // Default text based on score/verdict
+      // Base text from score/verdict
       if (verdict === "yes") {
         verdictTextEl.textContent =
           "Conditions look good – you have a solid chance of seeing aurora from here. 🌌";
@@ -490,15 +697,20 @@
           "It’s unlikely right now. You’d need much stronger activity or darker skies.";
       }
 
-      // Daylight override: if it's probably daytime, adjust the message
-      if (localHour !== null) {
-        const hour = ((localHour % 24) + 24) % 24;
-        const isDaytime = hour >= 7 && hour < 17;
-
-        if (isDaytime) {
-          verdictTextEl.textContent =
-            "It’s currently daylight at your location, so you won’t see the aurora until after dark.";
+      // Daylight override, now using solar model where possible
+      if (isDaytime) {
+        let msg =
+          "It’s currently daylight at your location, so you won’t see the aurora until after dark.";
+        if (darkness && (darkness.hasAstronomicalNight || darkness.alwaysAstronomicalDark)) {
+          if (darkness.alwaysAstronomicalDark) {
+            msg += " The sky stays fully dark throughout this date at your latitude.";
+          } else {
+            const start = formatHourLocal(darkness.astroDusk);
+            const end = formatHourLocal(darkness.astroDawn);
+            msg += ` Tonight it should be dark enough roughly between ${start} and ${end}.`;
+          }
         }
+        verdictTextEl.textContent = msg;
       }
 
       verdictScoreEl.textContent = `Score ${score.toFixed(0)} / 100`;
@@ -511,13 +723,38 @@
           debugListEl.appendChild(li);
         });
 
-        if (localHour !== null) {
-          const hour = ((localHour % 24) + 24) % 24;
-          const isDaytime = hour >= 7 && hour < 17;
+        if (darkness) {
           if (isDaytime) {
             const li = document.createElement("li");
+            if (darkness.hasAstronomicalNight || darkness.alwaysAstronomicalDark) {
+              if (darkness.alwaysAstronomicalDark) {
+                li.textContent =
+                  "The Sun is above the horizon right now, but remains well below -18° at night – the sky is fully dark when the Sun is down.";
+              } else {
+                const start = formatHourLocal(darkness.astroDusk);
+                const end = formatHourLocal(darkness.astroDawn);
+                li.textContent =
+                  `It is too bright to see aurora at the moment; your main dark window is roughly ${start}–${end}.`;
+              }
+            } else if (darkness.neverDark) {
+              li.textContent =
+                "Even at night the Sun doesn’t reach full astronomical darkness at this latitude and date, so the sky stays in twilight.";
+            } else {
+              li.textContent =
+                "It is currently daylight; we’ll refine twilight and darkness windows further in a later version.";
+            }
+            debugListEl.appendChild(li);
+          } else if (darkness.hasAstronomicalNight && darkness.isDarkNow) {
+            const li = document.createElement("li");
+            const start = formatHourLocal(darkness.astroDusk);
+            const end = formatHourLocal(darkness.astroDawn);
             li.textContent =
-              "It is likely too bright to see aurora right now; detailed sunset times will be integrated in a later version.";
+              `You are within the main dark window (${start}–${end}) for your location.`;
+            debugListEl.appendChild(li);
+          } else if (darkness.neverDark) {
+            const li = document.createElement("li");
+            li.textContent =
+              "The sky never gets fully dark at this latitude at this time of year; aurora will compete with bright twilight.";
             debugListEl.appendChild(li);
           }
         }
@@ -536,7 +773,14 @@
       }
 
       const now = new Date();
-      const localHour = now.getHours();
+      const localHour = now.getHours() + now.getMinutes() / 60;
+
+      // Update simple solar darkness info
+      const darkness = computeDarknessInfo(state.lat, state.lon, now);
+      state.darkness = darkness;
+      if (darkness) {
+        updateDarknessUI(darkness);
+      }
 
       const geomagLat =
         state.geomagneticLatitude != null
@@ -559,7 +803,7 @@
         timeLocalHour: localHour
       });
 
-      renderAuroraVerdict(result, { localHour });
+      renderAuroraVerdict(result, { localHour, darkness });
     }
 
     function onKpChange() {
