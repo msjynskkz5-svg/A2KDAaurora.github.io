@@ -1,6 +1,6 @@
 // Simple React app using CDN React/ReactDOM (no build step)
-// This version fetches real weather + space-weather data where possible,
-// uses GPS -> IP -> Isle of Rùm fallback for location, and shows only dark hours.
+// GPS -> IP -> Isle of Rùm location, manual "Choose location", dark hours only,
+// cloud + moon phase icons.
 
 // --- Types (JSDoc-style comments just for clarity) ---
 
@@ -14,7 +14,7 @@
  * @property {number} longitude
  * @property {string} timezone
  * @property {"gps"|"manual"|"ip"} source
- * @property {string} [sourceHint] // "gps" | "ip" | "rum-default"
+ * @property {string} [sourceHint] // "gps" | "ip" | "rum-default" | "manual"
  */
 
 /**
@@ -126,21 +126,17 @@ function moonPhaseIcon(phase) {
   return "🌘";
 }
 
-// --- Cloud icon helper (based on % cover, focused on sky transparency) ---
+// --- Cloud icon helper (night-friendly) ---
 
 function cloudIconForPercent(pct) {
-  if (pct <= 10) return "✨";      // essentially clear
-  if (pct <= 40) return "🌤";      // thin / broken cloud
-  if (pct <= 80) return "☁️";      // cloudy
-  return "🌧";                     // very overcast / sky mostly blocked
+  if (pct <= 10) return "✨";           // essentially clear
+  if (pct <= 40) return "☁️";          // thin / broken cloud
+  if (pct <= 80) return "☁️☁️";        // cloudy
+  return "🌧";                          // very overcast / sky mostly blocked
 }
 
 // --- Location helpers: GPS -> IP -> Isle of Rùm ---
 
-/**
- * Fallback location: Isle of Rùm, Scotland (dark-sky sanctuary)
- * @returns {UserLocation}
- */
 function rumFallbackLocation() {
   return {
     id: "fallback-rum",
@@ -155,11 +151,6 @@ function rumFallbackLocation() {
   };
 }
 
-/**
- * Use IP-based geolocation as an approximate fallback.
- * Uses a public IP geolocation service (accuracy varies).
- * @returns {Promise<UserLocation|null>}
- */
 async function fetchIpLocation() {
   try {
     const res = await fetch("https://ipapi.co/json/");
@@ -193,12 +184,10 @@ async function fetchIpLocation() {
 }
 
 /**
- * Try to get user location via browser geolocation first.
- * If that fails, try IP-based location. If that fails,
- * fall back to Isle of Rùm.
+ * Initial auto location: GPS -> IP -> Rum
  * @returns {Promise<UserLocation>}
  */
-function getUserLocation() {
+function getAutoLocation() {
   return new Promise(function (resolve) {
     function useIpThenRum() {
       fetchIpLocation()
@@ -287,7 +276,6 @@ async function fetchSpaceWeather() {
   const magJson = await magRes.json();
   const plasmaJson = await plasmaRes.json();
 
-  // Each JSON is an array where first element is headers
   const lastMag = magJson[magJson.length - 1];
   const magHeaders = magJson[0];
   const idxBz = magHeaders.indexOf("bz_gsm");
@@ -301,7 +289,6 @@ async function fetchSpaceWeather() {
   const bt = idxBt >= 0 ? parseFloat(lastMag[idxBt]) : NaN;
   const speed = idxSpeed >= 0 ? parseFloat(lastPlasma[idxSpeed]) : NaN;
 
-  // Simple classification
   let activityLabel = "Unknown";
   let baseStrength = 3; // 0–10 internal
 
@@ -329,7 +316,6 @@ async function fetchSpaceWeather() {
 
 /**
  * Build hourly forecasts and tonight summary from raw data.
- * This is a simplified first version of the "brain".
  */
 function buildForecast(location, weatherData, spaceWeather) {
   const now = Date.now();
@@ -339,7 +325,6 @@ function buildForecast(location, weatherData, spaceWeather) {
       ? weatherData.timezone
       : location.timezone;
 
-  /** @type {UserLocation} */
   const loc = Object.assign({}, location, { timezone: timezone });
 
   /** @type {HourlyAuroraForecast[]} */
@@ -369,12 +354,10 @@ function buildForecast(location, weatherData, spaceWeather) {
             ? spaceWeather.baseStrength
             : 3;
 
-        // Simple viewing score: base strength reduced by cloud cover
         let scoreValue = base * (1 - cloud / 100);
         if (scoreValue < 0) scoreValue = 0;
         if (scoreValue > 10) scoreValue = 10;
 
-        /** @type {ViewingChanceCategory} */
         let category = "VeryUnlikely";
         if (scoreValue >= 8) category = "Excellent";
         else if (scoreValue >= 5) category = "Good";
@@ -393,7 +376,6 @@ function buildForecast(location, weatherData, spaceWeather) {
     }
   }
 
-  // If we somehow have no dark hours, create a very simple fallback single hour
   if (hourly.length === 0) {
     const fallbackTime = new Date(now + 60 * 60 * 1000).toISOString();
     const phase = moonPhaseFraction(new Date(fallbackTime));
@@ -405,7 +387,6 @@ function buildForecast(location, weatherData, spaceWeather) {
     });
   }
 
-  // Find best hour
   let best = hourly[0];
   for (let i = 1; i < hourly.length; i++) {
     if (hourly[i].score.value > best.score.value) {
@@ -416,8 +397,7 @@ function buildForecast(location, weatherData, spaceWeather) {
   const bestScore = best.score.value;
   const bestCategory = best.score.category;
 
-  // Derive a simple best time window: first & last hour above a threshold
-  const threshold = Math.max(4, bestScore - 2); // dynamic-ish
+  const threshold = Math.max(4, bestScore - 2);
   let windowStart = null;
   let windowEnd = null;
   for (let i = 0; i < hourly.length; i++) {
@@ -429,7 +409,6 @@ function buildForecast(location, weatherData, spaceWeather) {
 
   const todayIso = new Date().toISOString().slice(0, 10);
 
-  // Simple darkness text from daily sunrise/sunset if available
   let darknessText = "Nighttime hours not yet calculated";
   if (
     weatherData &&
@@ -446,7 +425,6 @@ function buildForecast(location, weatherData, spaceWeather) {
       formatLocalTimeLabel(sunriseIso, timezone);
   }
 
-  // Simple clouds text from average clouds
   let avgCloud = 0;
   for (let i = 0; i < hourly.length; i++) {
     avgCloud += hourly[i].cloudsPercent;
@@ -473,7 +451,6 @@ function buildForecast(location, weatherData, spaceWeather) {
       ? "Low chance tonight"
       : "Aurora very unlikely tonight";
 
-  // Very simple direction placeholder for now
   const bestDirection = "North or North–Northwest";
 
   const explanationPieces = [];
@@ -486,12 +463,9 @@ function buildForecast(location, weatherData, spaceWeather) {
   } else {
     explanationPieces.push("Aurora activity estimate is uncertain");
   }
-
   explanationPieces.push(cloudsText.toLowerCase());
-
   const explanation = explanationPieces.join(", ") + ".";
 
-  /** @type {TonightSummary} */
   const summary = {
     date: todayIso,
     location: loc,
@@ -547,14 +521,14 @@ function DataStatusBanner({ availability }) {
 function categoryToDisplay(bestCategory) {
   switch (bestCategory) {
     case "Excellent":
-      return { label: "Excellent chance", color: "#4CAF50" }; // green
+      return { label: "Excellent chance", color: "#4CAF50" };
     case "Good":
-      return { label: "Good chance", color: "#009688" }; // teal
+      return { label: "Good chance", color: "#009688" };
     case "Low":
-      return { label: "Low chance", color: "#FFC107" }; // amber
+      return { label: "Low chance", color: "#FFC107" };
     case "VeryUnlikely":
     default:
-      return { label: "Very unlikely", color: "#607D8B" }; // blue-grey
+      return { label: "Very unlikely", color: "#607D8B" };
   }
 }
 
@@ -643,14 +617,14 @@ function TonightCard({ summary }) {
 function categoryColor(category) {
   switch (category) {
     case "Excellent":
-      return "#4CAF50"; // green
+      return "#4CAF50";
     case "Good":
-      return "#009688"; // teal
+      return "#009688";
     case "Low":
-      return "#FFC107"; // amber
+      return "#FFC107";
     case "VeryUnlikely":
     default:
-      return "#607D8B"; // blue-grey
+      return "#607D8B";
   }
 }
 
@@ -661,9 +635,7 @@ function Timeline({ hours, locationTimezone }) {
     React.createElement(
       "div",
       { style: { fontSize: 13, marginBottom: 8 } },
-      "Next dark hours – bar: viewing chance • ",
-      "☁: cloud cover • ",
-      "🌙: moon phase"
+      "Next dark hours – bar: viewing chance • ☁: cloud cover • 🌙: moon phase"
     ),
     React.createElement(
       "div",
@@ -694,7 +666,7 @@ function Timeline({ hours, locationTimezone }) {
             {
               style: {
                 marginTop: 4,
-                whiteSpace: "nowrap", // keep icon + % on one line
+                whiteSpace: "nowrap",
               },
             },
             cloudIcon,
@@ -750,11 +722,205 @@ function ConditionsRow({ summary }) {
   );
 }
 
+// --- Location chooser (manual search) ---
+
+function LocationSelector({
+  currentLocation,
+  sourceLabel,
+  onUseDeviceLocation,
+  onSelectManualLocation,
+}) {
+  const ReactRef = React;
+  const useState = ReactRef.useState;
+
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState("");
+
+  async function handleSearch(e) {
+    e.preventDefault();
+    const q = query.trim();
+    if (!q) return;
+    setSearching(true);
+    setSearchError("");
+    setResults([]);
+    try {
+      const url =
+        "https://geocoding-api.open-meteo.com/v1/search?name=" +
+        encodeURIComponent(q) +
+        "&count=5&language=en&format=json";
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("Geocoding failed");
+      const data = await res.json();
+      if (!data.results || !data.results.length) {
+        setSearchError("No places found for that search.");
+      } else {
+        setResults(data.results);
+      }
+    } catch (err) {
+      console.error(err);
+      setSearchError("Problem searching for that place.");
+    } finally {
+      setSearching(false);
+    }
+  }
+
+  function handleSelectPlace(place) {
+    const loc = {
+      id: "manual-" + place.id,
+      name: place.name,
+      country: place.country || "",
+      region: place.admin1 || "",
+      latitude: place.latitude,
+      longitude: place.longitude,
+      timezone: place.timezone || "UTC",
+      source: "manual",
+      sourceHint: "manual",
+    };
+    onSelectManualLocation(loc);
+    setResults([]);
+    setSearchError("");
+  }
+
+  return React.createElement(
+    "div",
+    {
+      style: {
+        marginBottom: 12,
+        padding: 8,
+        borderRadius: 8,
+        background: "#0e1620",
+        color: "#cfd8dc",
+        fontSize: 12,
+      },
+    },
+    React.createElement(
+      "div",
+      { style: { marginBottom: 4 } },
+      "Location: ",
+      React.createElement(
+        "strong",
+        null,
+        currentLocation
+          ? currentLocation.name +
+              (currentLocation.country ? " • " + currentLocation.country : "")
+          : "Loading..."
+      )
+    ),
+    React.createElement(
+      "div",
+      { style: { marginBottom: 8, color: "#90a4ae" } },
+      sourceLabel
+    ),
+    React.createElement(
+      "form",
+      {
+        onSubmit: handleSearch,
+        style: {
+          display: "flex",
+          gap: 6,
+          marginBottom: 6,
+        },
+      },
+      React.createElement("input", {
+        type: "text",
+        placeholder: "Search place…",
+        value: query,
+        onChange: function (e) {
+          setQuery(e.target.value);
+        },
+        style: {
+          flex: 1,
+          padding: "4px 6px",
+          borderRadius: 6,
+          border: "1px solid #37474f",
+          background: "#020712",
+          color: "#eceff1",
+        },
+      }),
+      React.createElement(
+        "button",
+        {
+          type: "submit",
+          disabled: searching,
+          style: {
+            padding: "4px 8px",
+            borderRadius: 6,
+            border: "1px solid #546e7a",
+            background: "#263238",
+            color: "#eceff1",
+            cursor: "pointer",
+          },
+        },
+        searching ? "Searching…" : "Search"
+      )
+    ),
+    React.createElement(
+      "button",
+      {
+        type: "button",
+        onClick: onUseDeviceLocation,
+        style: {
+          padding: "4px 8px",
+          borderRadius: 6,
+          border: "1px solid #546e7a",
+          background: "#1b2836",
+          color: "#eceff1",
+          cursor: "pointer",
+          fontSize: 11,
+          marginBottom: 6,
+        },
+      },
+      "Use device GPS / IP"
+    ),
+    searchError &&
+      React.createElement(
+        "div",
+        { style: { color: "#ef9a9a", marginBottom: 4 } },
+        searchError
+      ),
+    results.length > 0 &&
+      React.createElement(
+        "div",
+        {
+          style: {
+            marginTop: 4,
+            borderTop: "1px solid #263238",
+            paddingTop: 4,
+          },
+        },
+        results.map(function (place) {
+          return React.createElement(
+            "div",
+            {
+              key: place.id,
+              onClick: function () {
+                handleSelectPlace(place);
+              },
+              style: {
+                padding: "4px 2px",
+                cursor: "pointer",
+              },
+            },
+            place.name,
+            place.country ? " • " + place.country : "",
+            place.admin1 ? " (" + place.admin1 + ")" : ""
+          );
+        })
+      )
+  );
+}
+
+// --- Screen + App ---
+
 function TonightScreen() {
   const ReactRef = React;
   const useState = ReactRef.useState;
   const useEffect = ReactRef.useEffect;
 
+  const [currentLocation, setCurrentLocation] = useState(null);
+  const [sourceLabel, setSourceLabel] = useState("");
   const [summary, setSummary] = useState(null);
   const [hours, setHours] = useState([]);
   const [availability, setAvailability] = useState({
@@ -762,20 +928,70 @@ function TonightScreen() {
     spaceWeather: "ok",
     ovation: "missing",
     lightPollution: "missing",
-    notes: [
-      "Light pollution and detailed moon altitude are not yet included in the calculations.",
-    ],
+    notes: [],
   });
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [locationSourceLabel, setLocationSourceLabel] = useState("");
 
+  // Initial location: from saved manual, otherwise auto (GPS/IP/Rum)
   useEffect(function () {
     let cancelled = false;
 
-    async function load() {
+    async function initLocation() {
       try {
-        const loc = await getUserLocation();
+        const saved = localStorage.getItem("a2kda_location");
+        if (saved) {
+          const loc = JSON.parse(saved);
+          if (!cancelled) {
+            loc.sourceHint = "manual";
+            setCurrentLocation(loc);
+            setSourceLabel("Location from your saved location");
+            return;
+          }
+        }
+
+        const autoLoc = await getAutoLocation();
+        if (!cancelled) {
+          if (autoLoc.sourceHint === "gps") {
+            setSourceLabel("Location from your device GPS");
+          } else if (autoLoc.sourceHint === "ip") {
+            setSourceLabel("Location estimated from your network (IP)");
+          } else if (autoLoc.sourceHint === "rum-default") {
+            setSourceLabel(
+              "Default dark-sky location (Isle of Rùm, Scotland)"
+            );
+          }
+          setCurrentLocation(autoLoc);
+        }
+      } catch (e) {
+        console.error(e);
+        if (!cancelled) {
+          const fallback = rumFallbackLocation();
+          setCurrentLocation(fallback);
+          setSourceLabel(
+            "Default dark-sky location (Isle of Rùm, Scotland)"
+          );
+        }
+      }
+    }
+
+    initLocation();
+
+    return function () {
+      cancelled = true;
+    };
+  }, []);
+
+  // When location changes, load data
+  useEffect(
+    function () {
+      if (!currentLocation) return;
+
+      let cancelled = false;
+
+      async function loadForLocation() {
+        setLoading(true);
+        setError(null);
 
         /** @type {DataAvailability} */
         let avail = {
@@ -788,68 +1004,101 @@ function TonightScreen() {
           ],
         };
 
-        if (loc.sourceHint === "gps") {
-          setLocationSourceLabel("Location from your device GPS");
-        } else if (loc.sourceHint === "ip") {
-          setLocationSourceLabel("Location estimated from your network (IP)");
+        if (currentLocation.sourceHint === "ip") {
           avail.notes.push(
             "Your approximate location was estimated from your internet connection."
           );
-        } else if (loc.sourceHint === "rum-default") {
-          setLocationSourceLabel(
-            "Default dark-sky location (Isle of Rùm, Scotland)"
-          );
+        } else if (currentLocation.sourceHint === "rum-default") {
           avail.notes.push(
             "We couldn't get your device or IP-based location; using a default dark-sky location on the Isle of Rùm, Scotland."
           );
-        }
-
-        let weatherData = null;
-        try {
-          weatherData = await fetchWeather(loc);
-        } catch (e) {
-          console.error(e);
-          avail.weather = "missing";
+        } else if (currentLocation.sourceHint === "manual") {
           avail.notes.push(
-            "Weather data is unavailable; cloud cover is not included in tonight's estimate."
+            "Using your manually chosen location for all calculations."
           );
         }
 
-        let spaceWeather = null;
         try {
-          spaceWeather = await fetchSpaceWeather();
+          let weatherData = null;
+          try {
+            weatherData = await fetchWeather(currentLocation);
+          } catch (e) {
+            console.error(e);
+            avail.weather = "missing";
+            avail.notes.push(
+              "Weather data is unavailable; cloud cover is not included in tonight's estimate."
+            );
+          }
+
+          let spaceWeather = null;
+          try {
+            spaceWeather = await fetchSpaceWeather();
+          } catch (e) {
+            console.error(e);
+            avail.spaceWeather = "missing";
+            avail.notes.push(
+              "Space weather data is unavailable; aurora activity is assumed to be low."
+            );
+          }
+
+          const result = buildForecast(
+            currentLocation,
+            weatherData,
+            spaceWeather
+          );
+
+          if (!cancelled) {
+            setAvailability(avail);
+            setSummary(result.summary);
+            setHours(result.hours);
+            setLoading(false);
+          }
         } catch (e) {
           console.error(e);
-          avail.spaceWeather = "missing";
-          avail.notes.push(
-            "Space weather data is unavailable; aurora activity is assumed to be low."
-          );
-        }
-
-        const result = buildForecast(loc, weatherData, spaceWeather);
-        if (!cancelled) {
-          setAvailability(avail);
-          setSummary(result.summary);
-          setHours(result.hours);
-          setLoading(false);
-        }
-      } catch (e) {
-        console.error(e);
-        if (!cancelled) {
-          setError("Something went wrong while loading data.");
-          setLoading(false);
+          if (!cancelled) {
+            setError("Something went wrong while loading data.");
+            setLoading(false);
+          }
         }
       }
-    }
 
-    load();
+      loadForLocation();
 
-    return function () {
-      cancelled = true;
-    };
-  }, []);
+      return function () {
+        cancelled = true;
+      };
+    },
+    [currentLocation]
+  );
 
-  if (loading) {
+  function handleUseDeviceLocation() {
+    // Clear saved manual location and re-run auto
+    localStorage.removeItem("a2kda_location");
+    setCurrentLocation(null);
+    setSummary(null);
+    setHours([]);
+    setLoading(true);
+    setError(null);
+    // Will re-run initial location effect
+    getAutoLocation().then(function (autoLoc) {
+      if (autoLoc.sourceHint === "gps") {
+        setSourceLabel("Location from your device GPS");
+      } else if (autoLoc.sourceHint === "ip") {
+        setSourceLabel("Location estimated from your network (IP)");
+      } else if (autoLoc.sourceHint === "rum-default") {
+        setSourceLabel("Default dark-sky location (Isle of Rùm, Scotland)");
+      }
+      setCurrentLocation(autoLoc);
+    });
+  }
+
+  function handleSelectManualLocation(loc) {
+    localStorage.setItem("a2kda_location", JSON.stringify(loc));
+    setCurrentLocation(loc);
+    setSourceLabel("Location from your manually chosen place");
+  }
+
+  if (loading || !currentLocation || !summary) {
     return React.createElement(
       "div",
       { className: "loading" },
@@ -857,7 +1106,7 @@ function TonightScreen() {
     );
   }
 
-  if (error || !summary) {
+  if (error) {
     return React.createElement(
       "div",
       { className: "error" },
@@ -875,25 +1124,14 @@ function TonightScreen() {
         "div",
         { className: "app-header-title" },
         "A2KDA Aurora"
-      ),
-      React.createElement(
-        "div",
-        { className: "app-header-subtitle" },
-        summary.location.name,
-        summary.location.country ? " • " + summary.location.country : ""
-      ),
-      React.createElement(
-        "div",
-        {
-          style: {
-            fontSize: 11,
-            color: "#90a4ae",
-            marginTop: 2,
-          },
-        },
-        locationSourceLabel
       )
     ),
+    React.createElement(LocationSelector, {
+      currentLocation: currentLocation,
+      sourceLabel: sourceLabel,
+      onUseDeviceLocation: handleUseDeviceLocation,
+      onSelectManualLocation: handleSelectManualLocation,
+    }),
     React.createElement(DataStatusBanner, { availability: availability }),
     React.createElement(TonightCard, { summary: summary }),
     React.createElement(Timeline, {
