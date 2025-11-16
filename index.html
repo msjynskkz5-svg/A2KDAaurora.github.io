@@ -2,18 +2,1001 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>A2KDA Aurora - Tonight</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <link rel="stylesheet" href="styles.css" />
+  <title>Aurora App – Single File</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #020617;
+      --bg-elevated: #02081f;
+      --accent: #38bdf8;
+      --accent-soft: rgba(56, 189, 248, 0.12);
+      --good: #22c55e;
+      --maybe: #eab308;
+      --bad: #f97373;
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --border: #1f2937;
+      --danger: #f97316;
+      --shadow-soft: 0 18px 50px rgba(15, 23, 42, 0.8);
+      --radius-lg: 18px;
+      --radius-pill: 999px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
+        "Segoe UI", sans-serif;
+      background: radial-gradient(circle at top, #020617 0, #020617 35%, #000 100%);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      padding: 1.5rem;
+    }
+
+    .app {
+      width: 100%;
+      max-width: 800px;
+      background: radial-gradient(circle at 0 0, #020617 0, #020817 38%, #020617 60%);
+      border-radius: 24px;
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      padding: 1.5rem 1.75rem 1.75rem;
+      box-shadow: var(--shadow-soft);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .aurora-glow {
+      position: absolute;
+      inset: -20%;
+      background: radial-gradient(circle at 0 0, rgba(56, 189, 248, 0.16), transparent 55%),
+        radial-gradient(circle at 100% 0, rgba(52, 211, 153, 0.16), transparent 55%);
+      opacity: 0.8;
+      pointer-events: none;
+      z-index: -1;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .title-block h1 {
+      margin: 0;
+      font-size: 1.5rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: #e5f2ff;
+    }
+
+    .title-block p {
+      margin: 0.15rem 0 0;
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+
+    .pill {
+      padding: 0.3rem 0.7rem;
+      border-radius: var(--radius-pill);
+      font-size: 0.75rem;
+      background: rgba(15, 23, 42, 0.9);
+      border: 1px solid rgba(148, 163, 184, 0.45);
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .pill-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: #22c55e;
+      box-shadow: 0 0 0 5px rgba(34, 197, 94, 0.25);
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+      gap: 1.25rem;
+    }
+
+    @media (max-width: 720px) {
+      .layout {
+        grid-template-columns: minmax(0, 1fr);
+      }
+    }
+
+    .card {
+      background: linear-gradient(145deg, rgba(15, 23, 42, 0.96), rgba(15, 23, 42, 0.9));
+      border-radius: var(--radius-lg);
+      padding: 1rem 1.1rem;
+      border: 1px solid rgba(148, 163, 184, 0.28);
+      box-shadow: 0 14px 34px rgba(15, 23, 42, 0.9);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .card + .card {
+      margin-top: 0.7rem;
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 0.6rem;
+      margin-bottom: 0.7rem;
+    }
+
+    .card-title {
+      font-size: 0.95rem;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: #cbd5f5;
+    }
+
+    .card-subtitle {
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+
+    .location-main {
+      font-size: 1.1rem;
+      font-weight: 500;
+      margin-bottom: 0.15rem;
+    }
+
+    .location-detail {
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+
+    .location-meta {
+      margin-top: 0.5rem;
+      font-size: 0.8rem;
+      color: var(--muted);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+    }
+
+    .meta-pill {
+      padding: 0.18rem 0.5rem;
+      border-radius: var(--radius-pill);
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      background: rgba(15, 23, 42, 0.9);
+    }
+
+    .lp-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.2rem 0.55rem;
+      border-radius: var(--radius-pill);
+      font-size: 0.78rem;
+      border: 1px solid rgba(148, 163, 184, 0.32);
+      background: rgba(15, 23, 42, 0.9);
+      margin-top: 0.55rem;
+      color: var(--muted);
+    }
+
+    .lp-indicator {
+      width: 8px;
+      height: 18px;
+      border-radius: 999px;
+      background: linear-gradient(to top, #ef4444, #facc15, #22c55e);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .lp-indicator-inner {
+      position: absolute;
+      inset: auto 0 0 0;
+      background: #020617;
+      transition: height 0.4s ease;
+    }
+
+    .lp-badge-label-strong {
+      font-weight: 500;
+      color: #e5f2ff;
+    }
+
+    .lp-badge-dark {
+      border-color: rgba(45, 212, 191, 0.6);
+      background: radial-gradient(circle at 0 0, rgba(34, 197, 94, 0.2), rgba(15, 23, 42, 0.9));
+    }
+
+    .lp-badge-suburban {
+      border-color: rgba(250, 204, 21, 0.7);
+      background: radial-gradient(circle at 0 0, rgba(250, 204, 21, 0.15), rgba(15, 23, 42, 0.9));
+    }
+
+    .lp-badge-urban {
+      border-color: rgba(248, 113, 113, 0.7);
+      background: radial-gradient(circle at 0 0, rgba(248, 113, 113, 0.22), rgba(15, 23, 42, 0.96));
+    }
+
+    .lp-badge-unknown {
+      border-style: dashed;
+    }
+
+    .slider-row {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      margin-bottom: 0.4rem;
+    }
+
+    .slider-row label {
+      font-size: 0.82rem;
+      color: var(--muted);
+      min-width: 3rem;
+    }
+
+    .slider-row input[type="range"] {
+      flex: 1;
+    }
+
+    input[type="range"] {
+      -webkit-appearance: none;
+      width: 100%;
+      height: 4px;
+      border-radius: 999px;
+      background: #020617;
+      outline: none;
+      border: 1px solid rgba(148, 163, 184, 0.35);
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: var(--accent);
+      border: 2px solid #0b1120;
+      cursor: pointer;
+      box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.3);
+    }
+
+    input[type="range"]::-moz-range-thumb {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: var(--accent);
+      border: 2px solid #0b1120;
+      cursor: pointer;
+      box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.3);
+    }
+
+    .kp-value {
+      font-size: 0.85rem;
+      padding: 0.15rem 0.55rem;
+      border-radius: var(--radius-pill);
+      background: rgba(15, 23, 42, 0.9);
+      border: 1px solid rgba(148, 163, 184, 0.45);
+      color: #e5f2ff;
+    }
+
+    .hint {
+      font-size: 0.76rem;
+      color: var(--muted);
+      margin-top: 0.25rem;
+    }
+
+    .verdict {
+      border-radius: var(--radius-lg);
+      padding: 0.75rem 0.85rem;
+      margin-top: 0.2rem;
+      background: radial-gradient(circle at 0 0, rgba(56, 189, 248, 0.15), rgba(15, 23, 42, 0.98));
+      border: 1px solid rgba(56, 189, 248, 0.45);
+      font-size: 0.9rem;
+    }
+
+    .verdict[data-state="yes"] {
+      border-color: rgba(34, 197, 94, 0.7);
+      background: radial-gradient(circle at 0 0, rgba(34, 197, 94, 0.25), rgba(15, 23, 42, 0.98));
+    }
+
+    .verdict[data-state="maybe"] {
+      border-color: rgba(250, 204, 21, 0.9);
+      background: radial-gradient(circle at 0 0, rgba(250, 204, 21, 0.18), rgba(15, 23, 42, 0.98));
+    }
+
+    .verdict[data-state="no"] {
+      border-color: rgba(248, 113, 113, 0.8);
+      background: radial-gradient(circle at 0 0, rgba(248, 113, 113, 0.13), rgba(15, 23, 42, 0.98));
+    }
+
+    .verdict-main {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 0.5rem;
+    }
+
+    .verdict-text {
+      font-weight: 500;
+    }
+
+    .verdict-score {
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+
+    .debug-list {
+      list-style: none;
+      padding-left: 1rem;
+      margin: 0.45rem 0 0;
+      font-size: 0.78rem;
+      color: var(--muted);
+    }
+
+    .debug-list li {
+      margin-bottom: 0.2rem;
+      position: relative;
+    }
+
+    .debug-list li::before {
+      content: "•";
+      position: absolute;
+      left: -0.75rem;
+      color: rgba(148, 163, 184, 0.8);
+    }
+
+    .footer {
+      margin-top: 1.1rem;
+      font-size: 0.74rem;
+      color: var(--muted);
+      display: flex;
+      justify-content: space-between;
+      gap: 0.7rem;
+      flex-wrap: wrap;
+    }
+
+    .footer span {
+      opacity: 0.9;
+    }
+  </style>
 </head>
 <body>
-  <div id="root"></div>
+  <div class="app">
+    <div class="aurora-glow"></div>
+    <header>
+      <div class="title-block">
+        <h1>Aurora App</h1>
+        <p>See at-a-glance if there’s a realistic chance of aurora from where you are.</p>
+      </div>
+      <div class="pill">
+        <span class="pill-dot"></span>
+        <span>Live location &amp; sky brightness</span>
+      </div>
+    </header>
 
-  <!-- React and ReactDOM from CDN -->
-  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <div class="layout">
+      <!-- LEFT: Location + KP controls -->
+      <div>
+        <section class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Your location</div>
+              <div class="card-subtitle">Used to estimate both aurora visibility and light pollution.</div>
+            </div>
+          </div>
+          <div class="location-main" id="location-main">
+            Working out where you are…
+          </div>
+          <div class="location-detail" id="location-detail">
+            Waiting for your browser to share location, or falling back to an approximate IP-based lookup.
+          </div>
+          <div class="location-meta" id="location-meta">
+            <span class="meta-pill" id="location-source-pill">Source: detecting…</span>
+          </div>
+          <div
+            class="lp-badge lp-badge-unknown"
+            data-role="light-pollution-badge"
+            title="Light pollution estimate will update once we have a location."
+          >
+            <div class="lp-indicator">
+              <div class="lp-indicator-inner" style="height: 50%;"></div>
+            </div>
+            <span class="lp-badge-label-strong">Light pollution:</span>
+            <span class="lp-badge-label">estimating…</span>
+          </div>
+        </section>
 
-  <!-- Our app code -->
-  <script src="app.js"></script>
+        <section class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Aurora activity (KP)</div>
+              <div class="card-subtitle">
+                For now you can tweak KP manually to explore “what if?” scenarios.
+              </div>
+            </div>
+          </div>
+
+          <div class="slider-row">
+            <label for="kp-input">KP</label>
+            <input type="range" id="kp-input" min="0" max="9" step="0.1" value="3.5" />
+            <span class="kp-value" id="kp-value">KP 3.5</span>
+          </div>
+          <div class="hint">
+            In the real app this will be driven by live space weather data (e.g. NOAA SWPC forecasts).
+          </div>
+        </section>
+      </div>
+
+      <!-- RIGHT: Verdict -->
+      <div>
+        <section class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Aurora visibility from here</div>
+              <div class="card-subtitle">
+                Takes into account KP, your distance from the auroral oval, sky brightness, and local time.
+              </div>
+            </div>
+          </div>
+
+          <div class="verdict" data-role="aurora-verdict" data-state="">
+            <div class="verdict-main">
+              <div class="verdict-text" id="verdict-text">
+                Waiting for enough info to score your chances…
+              </div>
+              <div class="verdict-score" id="verdict-score">
+                Score — / 100
+              </div>
+            </div>
+            <ul class="debug-list" data-role="aurora-debug">
+              <li>We’ll start as soon as we have a location and a KP value.</li>
+            </ul>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <div class="footer">
+      <span id="footer-time"></span>
+      <span>Light pollution is currently estimated with a simple latitude-based model. You can plug in a real data source later.</span>
+    </div>
+  </div>
+
+  <!-- Logic: Light pollution + Aurora brain + app wiring -->
+  <script>
+    // -------- Light pollution module (simple heuristic) --------
+    (function (global) {
+      "use strict";
+
+      function normalizeLightPollution(options) {
+        const opts = options || {};
+        const bortle = typeof opts.bortle === "number" ? opts.bortle : null;
+        const skyBrightness =
+          typeof opts.skyBrightness === "number" ? opts.skyBrightness : null;
+
+        if (bortle != null) {
+          const clamped = Math.min(9, Math.max(1, bortle));
+          return (clamped - 1) / 8;
+        }
+
+        if (skyBrightness != null) {
+          const min = 18;
+          const max = 21.5;
+          const v = Math.min(max, Math.max(min, skyBrightness));
+          const norm = 1 - (v - min) / (max - min);
+          return norm;
+        }
+
+        return 0.5;
+      }
+
+      function classifyLightPollutionValue(normalized) {
+        const n = Math.min(1, Math.max(0, normalized));
+        if (n < 0.33) {
+          return { label: "Dark skies", code: "dark" };
+        } else if (n < 0.66) {
+          return { label: "Suburban skies", code: "suburban" };
+        } else {
+          return { label: "Urban / bright skies", code: "urban" };
+        }
+      }
+
+      async function getLightPollution(lat, lon) {
+        let heuristicNorm = 0.5;
+
+        if (typeof lat === "number" && typeof lon === "number") {
+          const absLat = Math.abs(lat);
+          if (absLat > 66) {
+            heuristicNorm = 0.22; // very high latitude, often darker options
+          } else if (absLat > 58) {
+            heuristicNorm = 0.32;
+          } else if (absLat > 50) {
+            heuristicNorm = 0.42;
+          } else if (absLat > 40) {
+            heuristicNorm = 0.58;
+          } else {
+            heuristicNorm = 0.72;
+          }
+
+          const absLon = Math.abs(lon);
+          if (absLon > 150 || absLon < 20) {
+            heuristicNorm -= 0.05;
+          }
+        }
+
+        const normalized = Math.min(1, Math.max(0, heuristicNorm));
+        const classification = classifyLightPollutionValue(normalized);
+
+        return {
+          source: "fallback",
+          normalized,
+          classification,
+          bortleClass: undefined,
+          skyBrightness: undefined
+        };
+      }
+
+      global.LightPollution = {
+        normalizeLightPollution,
+        classifyLightPollutionValue,
+        getLightPollution
+      };
+    })(window);
+  </script>
+
+  <script>
+    // -------- Aurora brain module --------
+    (function (global) {
+      "use strict";
+
+      function kpScore(kp) {
+        const k = Math.min(9, Math.max(0, Number(kp) || 0));
+        return (k / 9) * 60;
+      }
+
+      function locationScore(distanceToOvalKm) {
+        const maxDist = 1500;
+        const d = Math.min(maxDist, Math.max(0, Number(distanceToOvalKm) || 0));
+        return 30 * (1 - d / maxDist);
+      }
+
+      function lightPollutionPenalty(lightPollution, kp) {
+        const lp = Math.min(1, Math.max(0, Number(lightPollution) || 0));
+        const basePenalty = 30 * lp;
+
+        const k = Math.min(9, Math.max(0, Number(kp) || 0));
+        const kpReliefFactor = Math.min(1, k / 7);
+        const effectivePenalty = basePenalty * (1 - kpReliefFactor * 0.7);
+
+        return effectivePenalty;
+      }
+
+      function timeOfNightAdjustment(timeLocalHour) {
+        if (typeof timeLocalHour !== "number") return 0;
+        const h = ((timeLocalHour % 24) + 24) % 24;
+
+        if (h >= 22 || h < 2) return +5;
+        if ((h >= 3 && h <= 4) || (h >= 20 && h <= 21)) return +2;
+        if (h >= 9 && h <= 17) return -10;
+        return 0;
+      }
+
+      function computeBrain(inputs) {
+        const {
+          kp,
+          distanceToOvalKm,
+          geomagneticLatitude,
+          lightPollution,
+          cloudCover,
+          timeLocalHour
+        } = inputs;
+
+        const debug = [];
+
+        const sKp = kpScore(kp);
+        debug.push(`KP index ${kp} contributes ${sKp.toFixed(1)} points.`);
+
+        const sLoc = locationScore(distanceToOvalKm);
+        debug.push(
+          `Your position relative to the auroral oval contributes ${sLoc.toFixed(
+            1
+          )} points.`
+        );
+
+        const lpPenalty = lightPollutionPenalty(lightPollution, kp);
+        if (lightPollution < 0.33) {
+          debug.push(
+            `Dark skies – only a small light pollution penalty (${lpPenalty.toFixed(
+              1
+            )} points).`
+          );
+        } else if (lightPollution < 0.66) {
+          debug.push(
+            `Moderate light pollution – medium penalty (${lpPenalty.toFixed(
+              1
+            )} points).`
+          );
+        } else {
+          debug.push(
+            `Bright urban skies – heavy light pollution penalty (${lpPenalty.toFixed(
+              1
+            )} points).`
+          );
+        }
+
+        let score = sKp + sLoc - lpPenalty;
+
+        if (typeof cloudCover === "number") {
+          const cc = Math.min(1, Math.max(0, cloudCover));
+          const cloudPenalty = 25 * cc;
+          score -= cloudPenalty;
+          debug.push(
+            `Cloud cover reduces the score by ${cloudPenalty.toFixed(
+              1
+            )} points (cover: ${(cc * 100).toFixed(0)}%).`
+          );
+        }
+
+        const timeAdj = timeOfNightAdjustment(timeLocalHour);
+        if (timeAdj !== 0) {
+          score += timeAdj;
+          debug.push(
+            `Local time adjustment of ${timeAdj.toFixed(
+              1
+            )} points based on ${timeLocalHour}:00.`
+          );
+        }
+
+        score = Math.max(0, Math.min(100, score));
+
+        let verdict;
+        if (score >= 65) {
+          verdict = "yes";
+        } else if (score >= 35) {
+          verdict = "maybe";
+        } else {
+          verdict = "no";
+        }
+
+        debug.push(
+          `Final visibility score is ${score.toFixed(
+            0
+          )} / 100 → verdict: ${verdict.toUpperCase()}.`
+        );
+
+        return {
+          score,
+          verdict,
+          debug,
+          kpScore: sKp,
+          locationScore: sLoc,
+          lightPollutionPenalty: lpPenalty,
+          geomagneticLatitude
+        };
+      }
+
+      global.AuroraBrain = {
+        kpScore,
+        locationScore,
+        lightPollutionPenalty,
+        timeOfNightAdjustment,
+        computeBrain
+      };
+    })(window);
+  </script>
+
+  <script>
+    // -------- App wiring: location, UI, and brain --------
+    (function () {
+      "use strict";
+
+      const locMainEl = document.getElementById("location-main");
+      const locDetailEl = document.getElementById("location-detail");
+      const locMetaEl = document.getElementById("location-meta");
+      const locSourcePillEl = document.getElementById("location-source-pill");
+      const lpBadgeEl = document.querySelector("[data-role='light-pollution-badge']");
+      const lpIndicatorInner = lpBadgeEl.querySelector(".lp-indicator-inner");
+      const kpInputEl = document.getElementById("kp-input");
+      const kpValueEl = document.getElementById("kp-value");
+      const verdictContainer = document.querySelector("[data-role='aurora-verdict']");
+      const verdictTextEl = document.getElementById("verdict-text");
+      const verdictScoreEl = document.getElementById("verdict-score");
+      const debugListEl = document.querySelector("[data-role='aurora-debug']");
+      const footerTimeEl = document.getElementById("footer-time");
+
+      const state = {
+        lat: null,
+        lon: null,
+        geomagneticLatitude: null,
+        distanceToOvalKm: null,
+        lightPollution: 0.5,
+        kp: parseFloat(kpInputEl.value) || 3.5,
+        cloudCover: null
+      };
+
+      function updateFooterTime() {
+        const now = new Date();
+        const timeStr = now.toLocaleString(undefined, {
+          weekday: "short",
+          hour: "2-digit",
+          minute: "2-digit"
+        });
+        footerTimeEl.textContent = `Local time detected as ${timeStr}.`;
+      }
+
+      function approxGeomagneticLatitude(lat) {
+        // Simple approximation – good enough for our demo:
+        // subtract 11 degrees in Europe-ish longitudes, otherwise just use lat.
+        if (typeof lat !== "number") return null;
+        return lat - 11;
+      }
+
+      function approxDistanceToOvalKm(geomagLat) {
+        if (typeof geomagLat !== "number") return null;
+        const ovalLat = 67; // typical auroral oval latitude
+        const deltaLat = Math.abs(geomagLat - ovalLat);
+        return deltaLat * 111; // rough km per degree
+      }
+
+      function setLocationDisplay(options) {
+        const {
+          labelMain,
+          labelDetail,
+          sourceLabel,
+          sourceKind,
+          coordsText
+        } = options;
+
+        if (labelMain) locMainEl.textContent = labelMain;
+        if (labelDetail) locDetailEl.textContent = labelDetail;
+
+        locMetaEl.innerHTML = "";
+
+        const src = document.createElement("span");
+        src.className = "meta-pill";
+        src.id = "location-source-pill";
+        src.textContent = `Source: ${sourceLabel}`;
+        locMetaEl.appendChild(src);
+
+        if (coordsText) {
+          const coords = document.createElement("span");
+          coords.className = "meta-pill";
+          coords.textContent = coordsText;
+          locMetaEl.appendChild(coords);
+        }
+
+        if (sourceKind === "ip") {
+          src.style.borderColor = "rgba(234,179,8,0.9)";
+        } else if (sourceKind === "gps") {
+          src.style.borderColor = "rgba(34,197,94,0.9)";
+        } else {
+          src.style.borderColor = "rgba(148,163,184,0.5)";
+        }
+      }
+
+      function renderLightPollutionBadge(lpResult) {
+        if (!lpBadgeEl) return;
+
+        if (!lpResult) {
+          lpBadgeEl.className = "lp-badge lp-badge-unknown";
+          lpBadgeEl.title =
+            "Light pollution estimate is unavailable – using a default middle-of-the-road value.";
+          lpBadgeEl.querySelector(".lp-badge-label-strong").textContent =
+            "Light pollution:";
+          lpBadgeEl.querySelector(".lp-badge-label").textContent = "unknown";
+          lpIndicatorInner.style.height = "50%";
+          return;
+        }
+
+        const { normalized, classification } = lpResult;
+        lpBadgeEl.className = `lp-badge lp-badge-${classification.code}`;
+        lpBadgeEl.querySelector(".lp-badge-label-strong").textContent =
+          "Light pollution:";
+        lpBadgeEl.querySelector(".lp-badge-label").textContent =
+          classification.label;
+        lpBadgeEl.title = `Normalized light pollution: ${(
+          normalized * 100
+        ).toFixed(0)} / 100 (0 = dark, 100 = very bright)`;
+
+        const darkHeight = 10; // darkest
+        const brightHeight = 90; // brightest
+        const height = darkHeight + (brightHeight - darkHeight) * normalized;
+        lpIndicatorInner.style.height = `${height}%`;
+      }
+
+      function renderAuroraVerdict(result) {
+        const { verdict, score, debug } = result;
+
+        verdictContainer.dataset.state = verdict;
+
+        if (verdict === "yes") {
+          verdictTextEl.textContent =
+            "Conditions look good – you have a solid chance of seeing aurora from here. 🌌";
+        } else if (verdict === "maybe") {
+          verdictTextEl.textContent =
+            "It’s possible, but conditions are borderline. A darker spot or higher KP would really help.";
+        } else {
+          verdictTextEl.textContent =
+            "It’s unlikely right now. You’d need much stronger activity or darker skies.";
+        }
+
+        verdictScoreEl.textContent = `Score ${score.toFixed(0)} / 100`;
+
+        if (debugListEl) {
+          debugListEl.innerHTML = "";
+          debug.forEach((line) => {
+            const li = document.createElement("li");
+            li.textContent = line;
+            debugListEl.appendChild(li);
+          });
+        }
+      }
+
+      function recomputeAurora() {
+        if (state.lat == null || state.lon == null) {
+          verdictTextEl.textContent =
+            "We’re still waiting for a location before we can score your chances.";
+          verdictScoreEl.textContent = "Score — / 100";
+          verdictContainer.dataset.state = "";
+          return;
+        }
+
+        const now = new Date();
+        const localHour = now.getHours();
+
+        const geomagLat =
+          state.geomagneticLatitude != null
+            ? state.geomagneticLatitude
+            : approxGeomagneticLatitude(state.lat);
+        const distanceKm =
+          state.distanceToOvalKm != null
+            ? state.distanceToOvalKm
+            : approxDistanceToOvalKm(geomagLat);
+
+        state.geomagneticLatitude = geomagLat;
+        state.distanceToOvalKm = distanceKm;
+
+        const result = window.AuroraBrain.computeBrain({
+          kp: state.kp,
+          distanceToOvalKm: distanceKm,
+          geomagneticLatitude: geomagLat,
+          lightPollution: state.lightPollution,
+          cloudCover: state.cloudCover,
+          timeLocalHour: localHour
+        });
+
+        renderAuroraVerdict(result);
+      }
+
+      function onKpChange() {
+        const val = parseFloat(kpInputEl.value) || 0;
+        state.kp = val;
+        kpValueEl.textContent = `KP ${val.toFixed(1)}`;
+        recomputeAurora();
+      }
+
+      async function updateLightPollution(lat, lon) {
+        try {
+          const result = await window.LightPollution.getLightPollution(lat, lon);
+          state.lightPollution = result.normalized;
+          renderLightPollutionBadge(result);
+          recomputeAurora();
+        } catch (err) {
+          console.error("Failed to estimate light pollution", err);
+          state.lightPollution = 0.5;
+          renderLightPollutionBadge(null);
+          recomputeAurora();
+        }
+      }
+
+      function useIpLocationFallback() {
+        fetch("https://ipapi.co/json/")
+          .then((res) => res.json())
+          .then((data) => {
+            const city = data.city || "your area";
+            const country = data.country_name || data.country || "your country";
+            const lat = typeof data.latitude === "number" ? data.latitude : data.lat;
+            const lon =
+              typeof data.longitude === "number" ? data.longitude : data.lon;
+
+            state.lat = typeof lat === "number" ? lat : null;
+            state.lon = typeof lon === "number" ? lon : null;
+
+            const coordsText =
+              state.lat != null && state.lon != null
+                ? `Approx. ${state.lat.toFixed(2)}°, ${state.lon.toFixed(2)}°`
+                : null;
+
+            setLocationDisplay({
+              labelMain: `Near ${city} \u2022 ${country}`,
+              labelDetail: "Location estimated from your network (IP).",
+              sourceLabel: "IP-based (approximate)",
+              sourceKind: "ip",
+              coordsText
+            });
+
+            if (state.lat != null && state.lon != null) {
+              updateLightPollution(state.lat, state.lon);
+            } else {
+              recomputeAurora();
+            }
+          })
+          .catch((err) => {
+            console.error("IP location failed", err);
+            setLocationDisplay({
+              labelMain: "Couldn’t determine your location.",
+              labelDetail:
+                "We couldn’t get GPS or IP information. Try refreshing or checking location permissions.",
+              sourceLabel: "Unavailable",
+              sourceKind: "unknown",
+              coordsText: null
+            });
+            renderLightPollutionBadge(null);
+            recomputeAurora();
+          });
+      }
+
+      function initLocation() {
+        if (!navigator.geolocation) {
+          useIpLocationFallback();
+          return;
+        }
+
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            const { latitude, longitude, accuracy } = pos.coords;
+            state.lat = latitude;
+            state.lon = longitude;
+
+            const coordsText = `${latitude.toFixed(3)}°, ${longitude.toFixed(
+              3
+            )}° (±${Math.round(accuracy)} m)`;
+
+            setLocationDisplay({
+              labelMain: "Location from your device",
+              labelDetail:
+                "Using your device’s location services. This is typically accurate to a few hundred metres.",
+              sourceLabel: "Device location (precise)",
+              sourceKind: "gps",
+              coordsText
+            });
+
+            updateLightPollution(latitude, longitude);
+          },
+          (err) => {
+            console.warn("Geolocation failed, falling back to IP", err);
+            useIpLocationFallback();
+          },
+          {
+            enableHighAccuracy: true,
+            timeout: 8000,
+            maximumAge: 600000
+          }
+        );
+      }
+
+      function init() {
+        updateFooterTime();
+        kpInputEl.addEventListener("input", onKpChange);
+        initLocation();
+        onKpChange();
+      }
+
+      if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", init);
+      } else {
+        init();
+      }
+    })();
+  </script>
 </body>
 </html>
