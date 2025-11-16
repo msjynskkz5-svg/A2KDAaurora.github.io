@@ -787,26 +787,129 @@
     }
 
     function renderHourlyChart(darkness, baseInputs) {
-      if (!hourlyBarEl) return;
+  if (!hourlyBarEl) return;
 
-      hourlyBarEl.innerHTML = "";
+  hourlyBarEl.innerHTML = "";
 
-      if (!state.lat || !state.lon || !darkness) {
-        // If we don't have enough info, show a simple placeholder.
-        for (let i = 0; i < 8; i++) {
-          const block = document.createElement("div");
-          block.className = "hour-block";
-          block.innerHTML = `
-            <div class="hour-block-time">--:--</div>
-            <div class="hour-block-bar">
-              <div class="hour-block-bar-inner" style="height: 50%;"></div>
-            </div>
-            <div class="hour-block-meta">Waiting for location…</div>
-          `;
-          hourlyBarEl.appendChild(block);
-        }
-        return;
+  if (!state.lat || !state.lon || !darkness) {
+    // If we don't have enough info, show a simple placeholder.
+    for (let i = 0; i < 8; i++) {
+      const block = document.createElement("div");
+      block.className = "hour-block";
+      block.innerHTML = `
+        <div class="hour-block-time">--:--</div>
+        <div class="hour-block-bar">
+          <div class="hour-block-bar-inner" style="height: 50%;"></div>
+        </div>
+        <div class="hour-block-meta">Waiting for location…</div>
+      `;
+      hourlyBarEl.appendChild(block);
+    }
+    return;
+  }
+
+  const now = new Date();
+  const hourNow = now.getHours() + now.getMinutes() / 60;
+
+  const hours = [];
+  if (
+    darkness.hasAstronomicalNight &&
+    darkness.astroDusk != null &&
+    darkness.astroDawn != null
+  ) {
+    // If we're already in the dark window, start from the next full hour (from "now").
+    // Otherwise, start from the beginning of the dark window.
+    const inDarkNow = isHourBetween(
+      hourNow,
+      darkness.astroDusk,
+      darkness.astroDawn
+    );
+
+    let startHour;
+    if (inDarkNow) {
+      startHour = wrapHour(Math.ceil(hourNow));
+    } else {
+      // "Next dark hours" – use the beginning of the main dark window.
+      startHour = wrapHour(Math.round(darkness.astroDusk));
+    }
+
+    for (let i = 0; i < 8; i++) {
+      hours.push(wrapHour(startHour + i));
+    }
+  } else if (darkness.alwaysAstronomicalDark || darkness.alwaysNight) {
+    // Always dark: show the next 8 hours from now
+    let startHour = Math.floor(hourNow);
+    for (let i = 0; i < 8; i++) {
+      hours.push(wrapHour(startHour + i));
+    }
+  } else {
+    // No full darkness: still show the next 8 hours, but label accordingly
+    let startHour = Math.floor(hourNow);
+    for (let i = 0; i < 8; i++) {
+      hours.push(wrapHour(startHour + i));
+    }
+  }
+
+  hours.forEach((h) => {
+    const localHour = h;
+    const timeLabel = formatHourLocal(localHour);
+
+    const inputs = {
+      kp: baseInputs.kp,
+      distanceToOvalKm: baseInputs.distanceToOvalKm,
+      geomagneticLatitude: baseInputs.geomagneticLatitude,
+      lightPollution: baseInputs.lightPollution,
+      cloudCover: baseInputs.cloudCover,
+      timeLocalHour: localHour
+    };
+
+    let brain = AuroraBrain.computeBrain(inputs);
+    let score = brain.score;
+
+    // Apply a simple darkness weighting on top of the brain score
+    if (
+      darkness.hasAstronomicalNight &&
+      darkness.astroDusk != null &&
+      darkness.astroDawn != null
+    ) {
+      const inDark = isHourBetween(
+        localHour,
+        darkness.astroDusk,
+        darkness.astroDawn
+      );
+      if (!inDark) {
+        score *= 0.3;
       }
+    } else if (darkness.neverDark) {
+      score *= 0.5;
+    }
+
+    const scoreRounded = Math.round(score);
+    const barHeight = Math.max(8, Math.min(100, scoreRounded));
+
+    let isDayHour = false;
+    if (darkness.hasDay && darkness.sunrise != null && darkness.sunset != null) {
+      isDayHour = isHourBetween(localHour, darkness.sunrise, darkness.sunset);
+    } else if (darkness.alwaysDaylight) {
+      isDayHour = true;
+    }
+
+    const skyIcon = isDayHour ? "☀︎" : "🌙";
+    const metaText = `${scoreRounded}% · ☁︎ · ${skyIcon}`;
+
+    const block = document.createElement("div");
+    block.className = "hour-block";
+    block.innerHTML = `
+      <div class="hour-block-time">${timeLabel}</div>
+      <div class="hour-block-bar">
+        <div class="hour-block-bar-inner" style="height: ${100 - barHeight}%;"></div>
+      </div>
+      <div class="hour-block-meta">${metaText}</div>
+    `;
+    hourlyBarEl.appendChild(block);
+  });
+}
+
 
       const now = new Date();
       const hourNow = now.getHours() + now.getMinutes() / 60;
