@@ -98,7 +98,7 @@ function formatLocalDateTime(iso, timeZone) {
 /**
  * Try to get user location via browser geolocation.
  * Falls back to Inverness, UK if not available.
- * @returns {Promise<UserLocation>}
+ * @returns {Promise<UserLocation & { usedFallback?: boolean }>}
  */
 function getUserLocation() {
   return new Promise(function (resolve) {
@@ -113,6 +113,7 @@ function getUserLocation() {
         longitude: -4.2247,
         timezone: "Europe/London",
         source: "manual",
+        usedFallback: true,
       });
       return;
     }
@@ -126,8 +127,10 @@ function getUserLocation() {
           longitude: pos.coords.longitude,
           country: "",
           region: "",
-          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+          timezone:
+            Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
           source: "gps",
+          usedFallback: false,
         });
       },
       function () {
@@ -141,9 +144,10 @@ function getUserLocation() {
           longitude: -4.2247,
           timezone: "Europe/London",
           source: "manual",
+          usedFallback: true,
         });
       },
-      { enableHighAccuracy: false, timeout: 8000 }
+      { enableHighAccuracy: false, timeout: 15000 }
     );
   });
 }
@@ -177,7 +181,6 @@ async function fetchWeather(location) {
  * We'll just use latest Bz and solar wind speed as a rough indicator.
  */
 async function fetchSpaceWeather() {
-  // Magnetic data (Bz, Bt)
   const magUrl =
     "https://services.swpc.noaa.gov/products/solar-wind/mag-5-minute.json";
   const plasmaUrl =
@@ -241,9 +244,10 @@ async function fetchSpaceWeather() {
 function buildForecast(location, weatherData, spaceWeather) {
   const now = Date.now();
 
-  let timezone = weatherData && weatherData.timezone
-    ? weatherData.timezone
-    : location.timezone;
+  const timezone =
+    weatherData && weatherData.timezone
+      ? weatherData.timezone
+      : location.timezone;
 
   /** @type {UserLocation} */
   const loc = Object.assign({}, location, { timezone: timezone });
@@ -261,6 +265,7 @@ function buildForecast(location, weatherData, spaceWeather) {
     const clouds = weatherData.hourly.cloud_cover;
     for (let i = 0; i < times.length; i++) {
       const t = new Date(times[i]);
+      // Limit to next ~8 hours
       if (t.getTime() >= now && hourly.length < 8) {
         const cloud = clouds[i];
         const base =
@@ -273,6 +278,7 @@ function buildForecast(location, weatherData, spaceWeather) {
         if (scoreValue < 0) scoreValue = 0;
         if (scoreValue > 10) scoreValue = 10;
 
+        /** @type {ViewingChanceCategory} */
         let category = "VeryUnlikely";
         if (scoreValue >= 8) category = "Excellent";
         else if (scoreValue >= 5) category = "Good";
@@ -340,7 +346,7 @@ function buildForecast(location, weatherData, spaceWeather) {
       formatLocalTimeLabel(sunriseIso, timezone);
   }
 
-  // Simple clouds text from average clouds in best half of hours
+  // Simple clouds text from average clouds
   let avgCloud = 0;
   for (let i = 0; i < hourly.length; i++) {
     avgCloud += hourly[i].cloudsPercent;
@@ -441,14 +447,14 @@ function DataStatusBanner({ availability }) {
 function categoryToDisplay(bestCategory) {
   switch (bestCategory) {
     case "Excellent":
-      return { label: "Excellent chance", color: "#2e7d32" };
+      return { label: "Excellent chance", color: "#4CAF50" }; // green
     case "Good":
-      return { label: "Good chance", color: "#00796b" };
+      return { label: "Good chance", color: "#009688" }; // teal
     case "Low":
-      return { label: "Low chance", color: "#f9a825" };
+      return { label: "Low chance", color: "#FFC107" }; // amber
     case "VeryUnlikely":
     default:
-      return { label: "Very unlikely", color: "#757575" };
+      return { label: "Very unlikely", color: "#607D8B" }; // blue-grey
   }
 }
 
@@ -537,14 +543,14 @@ function TonightCard({ summary }) {
 function categoryColor(category) {
   switch (category) {
     case "Excellent":
-      return "#2e7d32";
+      return "#4CAF50"; // green
     case "Good":
-      return "#00796b";
+      return "#009688"; // teal
     case "Low":
-      return "#f9a825";
+      return "#FFC107"; // amber
     case "VeryUnlikely":
     default:
-      return "#757575";
+      return "#607D8B"; // blue-grey
   }
 }
 
@@ -555,7 +561,7 @@ function Timeline({ hours, locationTimezone }) {
     React.createElement(
       "div",
       { style: { fontSize: 13, marginBottom: 8 } },
-      "Next hours"
+      "Next hours – bar: viewing chance • ☁: cloud cover"
     ),
     React.createElement(
       "div",
@@ -636,7 +642,7 @@ function ConditionsRow({ summary }) {
 }
 
 function TonightScreen() {
-  const ReactRef = React; // avoid confusion
+  const ReactRef = React;
   const useState = ReactRef.useState;
   const useEffect = ReactRef.useEffect;
 
@@ -653,13 +659,14 @@ function TonightScreen() {
   });
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [locationSourceLabel, setLocationSourceLabel] = useState("");
 
   useEffect(function () {
     let cancelled = false;
 
     async function load() {
       try {
-        let loc = await getUserLocation();
+        const loc = await getUserLocation();
 
         /** @type {DataAvailability} */
         let avail = {
@@ -671,6 +678,17 @@ function TonightScreen() {
             "Light pollution and moon data are not yet included in the calculations.",
           ],
         };
+
+        if (loc.usedFallback) {
+          avail.notes.push(
+            "We couldn't get your precise device location; using a default location near Inverness, Scotland instead."
+          );
+          setLocationSourceLabel(
+            "Using fallback location (Near Inverness, Scotland)"
+          );
+        } else {
+          setLocationSourceLabel("Using device location");
+        }
 
         let weatherData = null;
         try {
@@ -749,6 +767,17 @@ function TonightScreen() {
         { className: "app-header-subtitle" },
         summary.location.name,
         summary.location.country ? " • " + summary.location.country : ""
+      ),
+      React.createElement(
+        "div",
+        {
+          style: {
+            fontSize: 11,
+            color: "#90a4ae",
+            marginTop: 2,
+          },
+        },
+        locationSourceLabel
       )
     ),
     React.createElement(DataStatusBanner, { availability: availability }),
