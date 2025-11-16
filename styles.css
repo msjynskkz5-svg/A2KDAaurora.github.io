@@ -70,7 +70,7 @@ header {
   color: #e5f2ff;
 }
 
-.title-block p {
+title-block p {
   margin: 0.15rem 0 0;
   font-size: 0.9rem;
   color: var(--muted);
@@ -497,7 +497,7 @@ input[type="range"]::-moz-range-thumb {
 }
 
 .hour-block {
-  min-width: 44px;
+  min-width: 50px;
   text-align: center;
   color: var(--muted);
 }

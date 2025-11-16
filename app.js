@@ -313,6 +313,8 @@
         src.style.borderColor = "rgba(34,197,94,0.9)";
       } else if (sourceKind === "search") {
         src.style.borderColor = "rgba(56,189,248,0.9)";
+      } else if (sourceKind === "default") {
+        src.style.borderColor = "rgba(96,165,250,0.9)";
       }
 
       tonightTitleEl.textContent = `Tonight at ${state.locationShort}`;
@@ -379,11 +381,16 @@
         `clouds and moonlight are still placeholders here.`;
     }
 
-    function renderAuroraVerdict(result) {
+    function renderAuroraVerdict(result, options) {
       const { verdict, score, debug } = result;
+      const localHour =
+        options && typeof options.localHour === "number"
+          ? options.localHour
+          : null;
 
       verdictContainer.dataset.state = verdict;
 
+      // Default text based on score/verdict
       if (verdict === "yes") {
         verdictTextEl.textContent =
           "Conditions look good – you have a solid chance of seeing aurora from here. 🌌";
@@ -395,6 +402,17 @@
           "It’s unlikely right now. You’d need much stronger activity or darker skies.";
       }
 
+      // Daylight override: if it's probably daytime, adjust the message
+      if (localHour !== null) {
+        const hour = ((localHour % 24) + 24) % 24;
+        const isDaytime = hour >= 7 && hour < 17;
+
+        if (isDaytime) {
+          verdictTextEl.textContent =
+            "It’s currently daylight at your location, so you won’t see the aurora until after dark.";
+        }
+      }
+
       verdictScoreEl.textContent = `Score ${score.toFixed(0)} / 100`;
 
       if (debugListEl) {
@@ -404,6 +422,17 @@
           li.textContent = line;
           debugListEl.appendChild(li);
         });
+
+        if (localHour !== null) {
+          const hour = ((localHour % 24) + 24) % 24;
+          const isDaytime = hour >= 7 && hour < 17;
+          if (isDaytime) {
+            const li = document.createElement("li");
+            li.textContent =
+              "It is likely too bright to see aurora right now; detailed sunset times will be integrated in a later version.";
+            debugListEl.appendChild(li);
+          }
+        }
       }
 
       updateTonightSummary(result);
@@ -442,7 +471,7 @@
         timeLocalHour: localHour
       });
 
-      renderAuroraVerdict(result);
+      renderAuroraVerdict(result, { localHour });
     }
 
     function onKpChange() {
@@ -452,11 +481,33 @@
       recomputeAurora();
     }
 
-    async function updateLightPollution(lat, lon) {
+    async function updateLightPollution(lat, lon, options) {
       try {
         const result = await LightPollution.getLightPollution(lat, lon);
-        state.lightPollution = result.normalized;
-        renderLightPollutionBadge(result);
+
+        let normalized = result.normalized;
+        const ctx = options && options.placeContext;
+
+        // Simple adjustment based on place type:
+        // - large-settlement: push towards bright
+        // - settlement: ensure at least suburban
+        // - dark-nature: clamp to dark
+        if (ctx === "large-settlement") {
+          normalized = Math.max(normalized, 0.8);
+        } else if (ctx === "settlement") {
+          normalized = Math.max(normalized, 0.6);
+        } else if (ctx === "dark-nature") {
+          normalized = Math.min(normalized, 0.25);
+        }
+
+        const adjusted = {
+          ...result,
+          normalized,
+          classification: LightPollution.classifyLightPollutionValue(normalized)
+        };
+
+        state.lightPollution = normalized;
+        renderLightPollutionBadge(adjusted);
         recomputeAurora();
       } catch (err) {
         console.error("Failed to estimate light pollution", err);
@@ -464,6 +515,28 @@
         renderLightPollutionBadge(null);
         recomputeAurora();
       }
+    }
+
+    function useDefaultRumLocation() {
+      // Isle of Rùm default fallback: ~57.0 N, -6.33 W
+      const lat = 57.0;
+      const lon = -6.33;
+      state.lat = lat;
+      state.lon = lon;
+
+      const coordsText = `${lat.toFixed(3)}°, ${lon.toFixed(3)}°`;
+
+      setLocationDisplay({
+        labelMain: "Isle of Rùm • Scotland, UK",
+        labelDetail:
+          "Using a default dark-sky location because we couldn’t determine your exact position.",
+        sourceLabel: "Default fallback (Isle of Rùm)",
+        sourceKind: "default",
+        coordsText,
+        shortLabel: "Isle of Rùm"
+      });
+
+      updateLightPollution(lat, lon, { placeContext: "dark-nature" });
     }
 
     function useIpLocationFallback() {
@@ -485,7 +558,7 @@
               : null;
 
           setLocationDisplay({
-            labelMain: `Near ${city} \u2022 ${country}`,
+            labelMain: `Near ${city} • ${country}`,
             labelDetail: "Location estimated from your network (IP).",
             sourceLabel: "IP-based (approximate)",
             sourceKind: "ip",
@@ -496,21 +569,14 @@
           if (state.lat != null && state.lon != null) {
             updateLightPollution(state.lat, state.lon);
           } else {
-            recomputeAurora();
+            // If we somehow didn't get usable coordinates, fall back to default.
+            useDefaultRumLocation();
           }
         })
         .catch((err) => {
           console.error("IP location failed", err);
-          setLocationDisplay({
-            labelMain: "Couldn’t determine your location.",
-            labelDetail:
-              "We couldn’t get GPS or IP information. Try refreshing or checking location permissions.",
-            sourceLabel: "Unavailable",
-            sourceKind: "unknown",
-            coordsText: null
-          });
-          renderLightPollutionBadge(null);
-          recomputeAurora();
+          // Ultimate fallback: default dark-sky location
+          useDefaultRumLocation();
         });
     }
 
@@ -587,7 +653,46 @@
             shortLabel: name
           });
 
-          updateLightPollution(lat, lon);
+          // Derive a simple place context from the Nominatim result
+          const category = r.category || r.class || "";
+          const type = r.type || "";
+          const importance = typeof r.importance === "number"
+            ? r.importance
+            : parseFloat(r.importance || "0");
+
+          let placeContext = null;
+
+          if (category === "place" && (type === "city" || type === "town")) {
+            if (importance && importance > 0.7) {
+              placeContext = "large-settlement";
+            } else {
+              placeContext = "settlement";
+            }
+          } else if (
+            category === "place" &&
+            (type === "village" || type === "hamlet" || type === "suburb")
+          ) {
+            placeContext = "settlement";
+          } else if (
+            category === "natural" ||
+            category === "leisure" ||
+            category === "boundary"
+          ) {
+            if (
+              type === "desert" ||
+              type === "nature_reserve" ||
+              type === "national_park" ||
+              type === "forest" ||
+              type === "heath" ||
+              type === "moor" ||
+              type === "peak" ||
+              type === "mountain"
+            ) {
+              placeContext = "dark-nature";
+            }
+          }
+
+          updateLightPollution(lat, lon, { placeContext });
         })
         .catch((err) => {
           console.error("Search failed", err);
@@ -621,8 +726,8 @@
         }
       });
 
-      // Start with IP fallback; GPS button lets user override
-      useIpLocationFallback();
+      // NEW: default flow is GPS → IP → Isle of Rùm
+      initLocationViaGps();
       onKpChange();
     }
 

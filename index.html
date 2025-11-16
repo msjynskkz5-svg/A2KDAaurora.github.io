@@ -36,7 +36,7 @@
         Working out where you are…
       </div>
       <div class="location-detail" id="location-detail">
-        Waiting for your browser to share location, or falling back to an approximate IP-based lookup.
+        Trying your device’s GPS first, then falling back to an approximate IP-based lookup.
       </div>
       <div class="location-meta" id="location-meta">
         <span class="meta-pill" id="location-source-pill">Source: detecting…</span>
@@ -70,9 +70,9 @@
     <section class="status-banner card" id="status-banner">
       <div class="status-banner-title">Data status:</div>
       <ul>
-        <li>Light pollution <strong>is included</strong> using a simple latitude-based model (can be replaced with a real data source).</li>
+        <li>Light pollution <strong>is included</strong> using a simple model based on location and place type (can be replaced with a real data source).</li>
         <li>Moon altitude, detailed darkness and cloud data are still placeholders and not yet used in the main score.</li>
-        <li>Your approximate location may be estimated from your internet connection if device GPS is not available.</li>
+        <li>Your approximate location may be estimated from your internet connection if device GPS is not available; as a last resort we fall back to the Isle of Rùm.</li>
       </ul>
     </section>
 
@@ -158,7 +158,7 @@
         </div>
         <div class="chip">
           <span class="chip-label">Light pollution: </span>
-          <span class="chip-value" id="chip-lightpollution">Included via latitude-based model.</span>
+          <span class="chip-value" id="chip-lightpollution">Included via a simple model.</span>
         </div>
       </div>
     </section>
@@ -181,56 +181,56 @@
           <div class="hour-block-bar">
             <div class="hour-block-bar-inner" style="height: 70%;"></div>
           </div>
-          <div class="hour-block-meta">61% · 🌖</div>
+          <div class="hour-block-meta">61% ☁︎ · 🌖</div>
         </div>
         <div class="hour-block">
           <div class="hour-block-time">17:00</div>
           <div class="hour-block-bar">
             <div class="hour-block-bar-inner" style="height: 55%;"></div>
           </div>
-          <div class="hour-block-meta">31% · 🌖</div>
+          <div class="hour-block-meta">31% ☁︎ · 🌖</div>
         </div>
         <div class="hour-block">
           <div class="hour-block-time">18:00</div>
           <div class="hour-block-bar">
             <div class="hour-block-bar-inner" style="height: 60%;"></div>
           </div>
-          <div class="hour-block-meta">39% · 🌖</div>
+          <div class="hour-block-meta">39% ☁︎ · 🌖</div>
         </div>
         <div class="hour-block">
           <div class="hour-block-time">19:00</div>
           <div class="hour-block-bar">
             <div class="hour-block-bar-inner" style="height: 85%;"></div>
           </div>
-          <div class="hour-block-meta">12% · 🌗</div>
+          <div class="hour-block-meta">12% ☁︎ · 🌗</div>
         </div>
         <div class="hour-block">
           <div class="hour-block-time">20:00</div>
           <div class="hour-block-bar">
             <div class="hour-block-bar-inner" style="height: 95%;"></div>
           </div>
-          <div class="hour-block-meta">2% · 🌗</div>
+          <div class="hour-block-meta">2% ☁︎ · 🌗</div>
         </div>
         <div class="hour-block">
           <div class="hour-block-time">21:00</div>
           <div class="hour-block-bar">
             <div class="hour-block-bar-inner" style="height: 100%;"></div>
           </div>
-          <div class="hour-block-meta">0% · 🌗</div>
+          <div class="hour-block-meta">0% ☁︎ · 🌗</div>
         </div>
         <div class="hour-block">
           <div class="hour-block-time">22:00</div>
           <div class="hour-block-bar">
             <div class="hour-block-bar-inner" style="height: 92%;"></div>
           </div>
-          <div class="hour-block-meta">4% · 🌘</div>
+          <div class="hour-block-meta">4% ☁︎ · 🌘</div>
         </div>
         <div class="hour-block">
           <div class="hour-block-time">23:00</div>
           <div class="hour-block-bar">
             <div class="hour-block-bar-inner" style="height: 80%;"></div>
           </div>
-          <div class="hour-block-meta">9% · 🌘</div>
+          <div class="hour-block-meta">9% ☁︎ · 🌘</div>
         </div>
       </div>
     </section>
@@ -264,7 +264,7 @@
       <div class="card">
         <div class="detail-heading">Light pollution</div>
         <div class="detail-body" id="detail-lightpollution">
-          We estimate light pollution from your latitude/longitude as a simple heuristic. Later, this can be swapped for a proper sky brightness / Bortle data source.
+          We estimate light pollution from your latitude/longitude and the type of place (big city vs remote nature). Later, this can be swapped for a proper sky brightness / Bortle data source.
         </div>
       </div>
     </section>
@@ -279,7 +279,7 @@
 
     <div class="footer">
       <span id="footer-time"></span>
-      <span>Light pollution is currently estimated with a simple latitude-based model. You can plug in a real data source later.</span>
+      <span>Light pollution is currently estimated with a simple model. You can plug in a real data source later.</span>
     </div>
   </div>
 
