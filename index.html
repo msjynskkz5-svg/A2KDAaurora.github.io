@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Aurora App – Single File</title>
+  <title>A2KDA Aurora</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     :root {
@@ -17,10 +17,9 @@
       --text: #e5e7eb;
       --muted: #9ca3af;
       --border: #1f2937;
-      --danger: #f97316;
-      --shadow-soft: 0 18px 50px rgba(15, 23, 42, 0.8);
       --radius-lg: 18px;
       --radius-pill: 999px;
+      --shadow-soft: 0 16px 40px rgba(15, 23, 42, 0.9);
     }
 
     * {
@@ -41,10 +40,10 @@
 
     .app {
       width: 100%;
-      max-width: 800px;
-      background: radial-gradient(circle at 0 0, #020617 0, #020817 38%, #020617 60%);
+      max-width: 960px;
+      background: radial-gradient(circle at 0 0, #020617 0, #020817 36%, #020617 60%);
       border-radius: 24px;
-      border: 1px solid rgba(148, 163, 184, 0.18);
+      border: 1px solid rgba(148, 163, 184, 0.22);
       padding: 1.5rem 1.75rem 1.75rem;
       box-shadow: var(--shadow-soft);
       position: relative;
@@ -53,10 +52,11 @@
 
     .aurora-glow {
       position: absolute;
-      inset: -20%;
-      background: radial-gradient(circle at 0 0, rgba(56, 189, 248, 0.16), transparent 55%),
-        radial-gradient(circle at 100% 0, rgba(52, 211, 153, 0.16), transparent 55%);
-      opacity: 0.8;
+      inset: -25%;
+      background:
+        radial-gradient(circle at 0 0, rgba(56, 189, 248, 0.18), transparent 55%),
+        radial-gradient(circle at 100% 0, rgba(52, 211, 153, 0.18), transparent 55%);
+      opacity: 0.85;
       pointer-events: none;
       z-index: -1;
     }
@@ -66,13 +66,14 @@
       justify-content: space-between;
       align-items: center;
       gap: 1rem;
-      margin-bottom: 1.25rem;
+      margin-bottom: 1.2rem;
     }
 
     .title-block h1 {
       margin: 0;
       font-size: 1.5rem;
-      letter-spacing: 0.06em;
+      font-weight: 700;
+      letter-spacing: 0.08em;
       text-transform: uppercase;
       color: #e5f2ff;
     }
@@ -104,30 +105,18 @@
       box-shadow: 0 0 0 5px rgba(34, 197, 94, 0.25);
     }
 
-    .layout {
-      display: grid;
-      grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
-      gap: 1.25rem;
-    }
-
-    @media (max-width: 720px) {
-      .layout {
-        grid-template-columns: minmax(0, 1fr);
-      }
-    }
-
     .card {
       background: linear-gradient(145deg, rgba(15, 23, 42, 0.96), rgba(15, 23, 42, 0.9));
       border-radius: var(--radius-lg);
       padding: 1rem 1.1rem;
       border: 1px solid rgba(148, 163, 184, 0.28);
-      box-shadow: 0 14px 34px rgba(15, 23, 42, 0.9);
+      box-shadow: 0 12px 30px rgba(15, 23, 42, 0.85);
       position: relative;
       overflow: hidden;
     }
 
     .card + .card {
-      margin-top: 0.7rem;
+      margin-top: 0.8rem;
     }
 
     .card-header {
@@ -152,19 +141,19 @@
     }
 
     .location-main {
-      font-size: 1.1rem;
+      font-size: 1.02rem;
       font-weight: 500;
       margin-bottom: 0.15rem;
     }
 
     .location-detail {
-      font-size: 0.9rem;
+      font-size: 0.88rem;
       color: var(--muted);
     }
 
     .location-meta {
       margin-top: 0.5rem;
-      font-size: 0.8rem;
+      font-size: 0.78rem;
       color: var(--muted);
       display: flex;
       flex-wrap: wrap;
@@ -172,10 +161,53 @@
     }
 
     .meta-pill {
-      padding: 0.18rem 0.5rem;
+      padding: 0.2rem 0.5rem;
       border-radius: var(--radius-pill);
-      border: 1px solid rgba(148, 163, 184, 0.25);
+      border: 1px solid rgba(148, 163, 184, 0.3);
       background: rgba(15, 23, 42, 0.9);
+    }
+
+    .search-row {
+      display: flex;
+      gap: 0.4rem;
+      margin-top: 0.7rem;
+    }
+
+    .search-row input[type="text"] {
+      flex: 1;
+      padding: 0.45rem 0.6rem;
+      border-radius: 10px;
+      border: 1px solid rgba(148, 163, 184, 0.4);
+      background: rgba(15, 23, 42, 0.98);
+      color: var(--text);
+      font-size: 0.86rem;
+    }
+
+    .search-row input[type="text"]::placeholder {
+      color: #6b7280;
+    }
+
+    .btn {
+      padding: 0.45rem 0.75rem;
+      border-radius: 10px;
+      border: 1px solid rgba(148, 163, 184, 0.5);
+      background: rgba(15, 23, 42, 0.98);
+      color: var(--text);
+      font-size: 0.82rem;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .btn-primary {
+      background: linear-gradient(to right, #22c55e, #38bdf8);
+      border-color: transparent;
+      color: #0b1120;
+      font-weight: 500;
+    }
+
+    .btn:disabled {
+      opacity: 0.6;
+      cursor: default;
     }
 
     .lp-badge {
@@ -204,7 +236,7 @@
       position: absolute;
       inset: auto 0 0 0;
       background: #020617;
-      transition: height 0.4s ease;
+      transition: height 0.3s ease;
     }
 
     .lp-badge-label-strong {
@@ -213,22 +245,34 @@
     }
 
     .lp-badge-dark {
-      border-color: rgba(45, 212, 191, 0.6);
-      background: radial-gradient(circle at 0 0, rgba(34, 197, 94, 0.2), rgba(15, 23, 42, 0.9));
+      border-color: rgba(45, 212, 191, 0.7);
+      background: radial-gradient(circle at 0 0, rgba(34, 197, 94, 0.22), rgba(15, 23, 42, 0.96));
     }
 
     .lp-badge-suburban {
-      border-color: rgba(250, 204, 21, 0.7);
-      background: radial-gradient(circle at 0 0, rgba(250, 204, 21, 0.15), rgba(15, 23, 42, 0.9));
+      border-color: rgba(250, 204, 21, 0.8);
+      background: radial-gradient(circle at 0 0, rgba(250, 204, 21, 0.18), rgba(15, 23, 42, 0.96));
     }
 
     .lp-badge-urban {
-      border-color: rgba(248, 113, 113, 0.7);
-      background: radial-gradient(circle at 0 0, rgba(248, 113, 113, 0.22), rgba(15, 23, 42, 0.96));
+      border-color: rgba(248, 113, 113, 0.85);
+      background: radial-gradient(circle at 0 0, rgba(248, 113, 113, 0.2), rgba(15, 23, 42, 0.98));
     }
 
     .lp-badge-unknown {
       border-style: dashed;
+    }
+
+    .grid-two {
+      display: grid;
+      grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+      gap: 0.9rem;
+    }
+
+    @media (max-width: 800px) {
+      .grid-two {
+        grid-template-columns: minmax(0, 1fr);
+      }
     }
 
     .slider-row {
@@ -241,7 +285,7 @@
     .slider-row label {
       font-size: 0.82rem;
       color: var(--muted);
-      min-width: 3rem;
+      min-width: 2.5rem;
     }
 
     .slider-row input[type="range"] {
@@ -280,7 +324,7 @@
     }
 
     .kp-value {
-      font-size: 0.85rem;
+      font-size: 0.82rem;
       padding: 0.15rem 0.55rem;
       border-radius: var(--radius-pill);
       background: rgba(15, 23, 42, 0.9);
@@ -296,10 +340,9 @@
 
     .verdict {
       border-radius: var(--radius-lg);
-      padding: 0.75rem 0.85rem;
-      margin-top: 0.2rem;
-      background: radial-gradient(circle at 0 0, rgba(56, 189, 248, 0.15), rgba(15, 23, 42, 0.98));
-      border: 1px solid rgba(56, 189, 248, 0.45);
+      padding: 0.7rem 0.85rem;
+      background: radial-gradient(circle at 0 0, rgba(56, 189, 248, 0.18), rgba(15, 23, 42, 0.98));
+      border: 1px solid rgba(56, 189, 248, 0.5);
       font-size: 0.9rem;
     }
 
@@ -310,19 +353,19 @@
 
     .verdict[data-state="maybe"] {
       border-color: rgba(250, 204, 21, 0.9);
-      background: radial-gradient(circle at 0 0, rgba(250, 204, 21, 0.18), rgba(15, 23, 42, 0.98));
+      background: radial-gradient(circle at 0 0, rgba(250, 204, 21, 0.2), rgba(15, 23, 42, 0.98));
     }
 
     .verdict[data-state="no"] {
-      border-color: rgba(248, 113, 113, 0.8);
-      background: radial-gradient(circle at 0 0, rgba(248, 113, 113, 0.13), rgba(15, 23, 42, 0.98));
+      border-color: rgba(248, 113, 113, 0.85);
+      background: radial-gradient(circle at 0 0, rgba(248, 113, 113, 0.17), rgba(15, 23, 42, 0.98));
     }
 
     .verdict-main {
       display: flex;
       justify-content: space-between;
       align-items: baseline;
-      gap: 0.5rem;
+      gap: 0.7rem;
     }
 
     .verdict-text {
@@ -354,8 +397,167 @@
       color: rgba(148, 163, 184, 0.8);
     }
 
+    /* Data status banner (old panel) */
+    .status-banner {
+      background: #fef9c3;
+      color: #713f12;
+      border-radius: var(--radius-lg);
+      padding: 0.75rem 0.9rem;
+      border: 1px solid #facc15;
+      font-size: 0.85rem;
+    }
+
+    .status-banner-title {
+      font-weight: 600;
+      margin-bottom: 0.15rem;
+    }
+
+    .status-banner ul {
+      margin: 0.2rem 0 0;
+      padding-left: 1.1rem;
+    }
+
+    .status-banner li {
+      margin-bottom: 0.15rem;
+    }
+
+    /* Tonight summary + classic panels */
+
+    .tonight-title {
+      font-size: 0.95rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #e5f2ff;
+      margin-bottom: 0.35rem;
+    }
+
+    .tonight-location {
+      font-size: 0.9rem;
+      color: var(--muted);
+      margin-bottom: 0.6rem;
+    }
+
+    .tonight-chance {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-bottom: 0.2rem;
+    }
+
+    .chance-low {
+      color: #facc15;
+    }
+
+    .chance-medium {
+      color: #22c55e;
+    }
+
+    .chance-high {
+      color: #4ade80;
+    }
+
+    .tonight-direction {
+      font-size: 0.92rem;
+      margin-bottom: 0.35rem;
+    }
+
+    .tonight-geomag {
+      font-size: 0.9rem;
+      color: var(--muted);
+      margin-bottom: 0.55rem;
+    }
+
+    .chip-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+      margin-bottom: 0.3rem;
+    }
+
+    .chip {
+      padding: 0.2rem 0.55rem;
+      border-radius: var(--radius-pill);
+      border: 1px solid rgba(148, 163, 184, 0.45);
+      font-size: 0.78rem;
+      background: rgba(15, 23, 42, 0.96);
+    }
+
+    .chip-label {
+      font-weight: 500;
+    }
+
+    .chip-value {
+      opacity: 0.9;
+    }
+
+    .hourly-bar {
+      display: flex;
+      gap: 0.6rem;
+      margin-top: 0.4rem;
+      overflow-x: auto;
+      padding-bottom: 0.2rem;
+      font-size: 0.78rem;
+    }
+
+    .hour-block {
+      min-width: 44px;
+      text-align: center;
+      color: var(--muted);
+    }
+
+    .hour-block-time {
+      margin-bottom: 0.15rem;
+    }
+
+    .hour-block-bar {
+      width: 18px;
+      height: 38px;
+      border-radius: 999px;
+      margin: 0 auto 0.15rem;
+      background: linear-gradient(to top, #0f172a, rgba(56, 189, 248, 0.65));
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hour-block-bar-inner {
+      position: absolute;
+      inset: auto 0 0 0;
+      background: #020617;
+    }
+
+    .hour-block-meta {
+      font-size: 0.7rem;
+    }
+
+    .detail-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 0.8rem;
+      margin-top: 0.8rem;
+    }
+
+    .detail-heading {
+      font-size: 0.86rem;
+      font-weight: 600;
+      margin-bottom: 0.2rem;
+    }
+
+    .detail-body {
+      font-size: 0.83rem;
+      color: var(--muted);
+    }
+
+    .tip {
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+
+    .tip strong {
+      color: #e5f2ff;
+      font-weight: 500;
+    }
+
     .footer {
-      margin-top: 1.1rem;
+      margin-top: 1rem;
       font-size: 0.74rem;
       color: var(--muted);
       display: flex;
@@ -363,18 +565,15 @@
       gap: 0.7rem;
       flex-wrap: wrap;
     }
-
-    .footer span {
-      opacity: 0.9;
-    }
   </style>
 </head>
 <body>
   <div class="app">
     <div class="aurora-glow"></div>
+
     <header>
       <div class="title-block">
-        <h1>Aurora App</h1>
+        <h1>A2KDA Aurora</h1>
         <p>See at-a-glance if there’s a realistic chance of aurora from where you are.</p>
       </div>
       <div class="pill">
@@ -383,87 +582,261 @@
       </div>
     </header>
 
-    <div class="layout">
-      <!-- LEFT: Location + KP controls -->
-      <div>
-        <section class="card">
-          <div class="card-header">
-            <div>
-              <div class="card-title">Your location</div>
-              <div class="card-subtitle">Used to estimate both aurora visibility and light pollution.</div>
-            </div>
+    <!-- LOCATION CARD (with search + light pollution badge) -->
+    <section class="card">
+      <div class="card-header">
+        <div>
+          <div class="card-title">Location</div>
+          <div class="card-subtitle">
+            Used to estimate both aurora visibility and light pollution.
           </div>
-          <div class="location-main" id="location-main">
-            Working out where you are…
-          </div>
-          <div class="location-detail" id="location-detail">
-            Waiting for your browser to share location, or falling back to an approximate IP-based lookup.
-          </div>
-          <div class="location-meta" id="location-meta">
-            <span class="meta-pill" id="location-source-pill">Source: detecting…</span>
-          </div>
-          <div
-            class="lp-badge lp-badge-unknown"
-            data-role="light-pollution-badge"
-            title="Light pollution estimate will update once we have a location."
-          >
-            <div class="lp-indicator">
-              <div class="lp-indicator-inner" style="height: 50%;"></div>
-            </div>
-            <span class="lp-badge-label-strong">Light pollution:</span>
-            <span class="lp-badge-label">estimating…</span>
-          </div>
-        </section>
-
-        <section class="card">
-          <div class="card-header">
-            <div>
-              <div class="card-title">Aurora activity (KP)</div>
-              <div class="card-subtitle">
-                For now you can tweak KP manually to explore “what if?” scenarios.
-              </div>
-            </div>
-          </div>
-
-          <div class="slider-row">
-            <label for="kp-input">KP</label>
-            <input type="range" id="kp-input" min="0" max="9" step="0.1" value="3.5" />
-            <span class="kp-value" id="kp-value">KP 3.5</span>
-          </div>
-          <div class="hint">
-            In the real app this will be driven by live space weather data (e.g. NOAA SWPC forecasts).
-          </div>
-        </section>
+        </div>
       </div>
 
-      <!-- RIGHT: Verdict -->
-      <div>
-        <section class="card">
-          <div class="card-header">
-            <div>
-              <div class="card-title">Aurora visibility from here</div>
-              <div class="card-subtitle">
-                Takes into account KP, your distance from the auroral oval, sky brightness, and local time.
-              </div>
-            </div>
-          </div>
-
-          <div class="verdict" data-role="aurora-verdict" data-state="">
-            <div class="verdict-main">
-              <div class="verdict-text" id="verdict-text">
-                Waiting for enough info to score your chances…
-              </div>
-              <div class="verdict-score" id="verdict-score">
-                Score — / 100
-              </div>
-            </div>
-            <ul class="debug-list" data-role="aurora-debug">
-              <li>We’ll start as soon as we have a location and a KP value.</li>
-            </ul>
-          </div>
-        </section>
+      <div class="location-main" id="location-main">
+        Working out where you are…
       </div>
-    </div>
+      <div class="location-detail" id="location-detail">
+        Waiting for your browser to share location, or falling back to an approximate IP-based lookup.
+      </div>
+      <div class="location-meta" id="location-meta">
+        <span class="meta-pill" id="location-source-pill">Source: detecting…</span>
+      </div>
+
+      <div class="search-row">
+        <input
+          type="text"
+          id="search-input"
+          placeholder="Search place…"
+          autocomplete="off"
+        />
+        <button class="btn" id="search-button">Search</button>
+        <button class="btn btn-primary" id="gps-button">Use device GPS / IP</button>
+      </div>
+
+      <div
+        class="lp-badge lp-badge-unknown"
+        data-role="light-pollution-badge"
+        title="Light pollution estimate will update once we have a location."
+      >
+        <div class="lp-indicator">
+          <div class="lp-indicator-inner" style="height: 50%;"></div>
+        </div>
+        <span class="lp-badge-label-strong">Light pollution:</span>
+        <span class="lp-badge-label">estimating…</span>
+      </div>
+    </section>
+
+    <!-- DATA STATUS BANNER (classic panel) -->
+    <section class="status-banner card" style="background:#fef9c3;color:#713f12;border-color:#facc15;">
+      <div class="status-banner-title">Data status:</div>
+      <ul>
+        <li>Light pollution <strong>is included</strong> using a simple latitude-based model (can be replaced with a real data source).</li>
+        <li>Moon altitude, detailed darkness and cloud data are still placeholders and not yet used in the main score.</li>
+        <li>Your approximate location may be estimated from your internet connection if device GPS is not available.</li>
+      </ul>
+    </section>
+
+    <!-- KP + VERDICT (new brain) -->
+    <section class="grid-two">
+      <section class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Aurora activity (KP)</div>
+            <div class="card-subtitle">
+              For now you can tweak KP manually to explore “what if?” scenarios.
+            </div>
+          </div>
+        </div>
+
+        <div class="slider-row">
+          <label for="kp-input">KP</label>
+          <input type="range" id="kp-input" min="0" max="9" step="0.1" value="3.5" />
+          <span class="kp-value" id="kp-value">KP 3.5</span>
+        </div>
+        <div class="hint">
+          In the full app this will be driven by live space weather data (e.g. NOAA SWPC forecasts).
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Aurora visibility from here</div>
+            <div class="card-subtitle">
+              Takes into account KP, your distance from the auroral oval, sky brightness, and local time.
+            </div>
+          </div>
+        </div>
+
+        <div class="verdict" data-role="aurora-verdict" data-state="">
+          <div class="verdict-main">
+            <div class="verdict-text" id="verdict-text">
+              Waiting for enough info to score your chances…
+            </div>
+            <div class="verdict-score" id="verdict-score">
+              Score — / 100
+            </div>
+          </div>
+          <ul class="debug-list" data-role="aurora-debug">
+            <li>We’ll start as soon as we have a location and a KP value.</li>
+          </ul>
+        </div>
+      </section>
+    </section>
+
+    <!-- TONIGHT SUMMARY (classic panel rebuilt) -->
+    <section class="card">
+      <div class="tonight-title" id="tonight-title">Tonight at your location</div>
+      <div class="tonight-location" id="tonight-location-sub">Summary based on today’s conditions.</div>
+
+      <div class="tonight-chance chance-low" id="tonight-chance">
+        Low chance
+      </div>
+      <div class="tonight-direction" id="tonight-direction">
+        Look North or North–Northwest.
+      </div>
+      <div class="tonight-geomag" id="tonight-geomag">
+        Geomagnetic activity looks low; cloud and moonlight estimates are still placeholders.
+      </div>
+
+      <div class="chip-row">
+        <div class="chip">
+          <span class="chip-label">Aurora activity: </span>
+          <span class="chip-value" id="chip-aurora">Low</span>
+        </div>
+        <div class="chip">
+          <span class="chip-label">Clouds: </span>
+          <span class="chip-value" id="chip-clouds">Mostly clear (placeholder 20%).</span>
+        </div>
+        <div class="chip">
+          <span class="chip-label">Moon: </span>
+          <span class="chip-value" id="chip-moon">Moon phase shown per hour; altitude integration coming soon.</span>
+        </div>
+        <div class="chip">
+          <span class="chip-label">Darkness: </span>
+          <span class="chip-value" id="chip-darkness">Sunset / sunrise times placeholder.</span>
+        </div>
+        <div class="chip">
+          <span class="chip-label">Light pollution: </span>
+          <span class="chip-value" id="chip-lightpollution">Included via latitude-based model.</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- NEXT DARK HOURS PLACEHOLDER -->
+    <section class="card">
+      <div class="card-header">
+        <div>
+          <div class="card-title">Next dark hours</div>
+          <div class="card-subtitle">
+            Prototype bar chart – viewing chance, cloud cover and moon phase will plug in here.
+          </div>
+        </div>
+      </div>
+
+      <div class="hourly-bar" id="hourly-bar">
+        <!-- Simple fixed demo hours -->
+        <div class="hour-block">
+          <div class="hour-block-time">16:00</div>
+          <div class="hour-block-bar">
+            <div class="hour-block-bar-inner" style="height: 70%;"></div>
+          </div>
+          <div class="hour-block-meta">61% · 🌖</div>
+        </div>
+        <div class="hour-block">
+          <div class="hour-block-time">17:00</div>
+          <div class="hour-block-bar">
+            <div class="hour-block-bar-inner" style="height: 55%;"></div>
+          </div>
+          <div class="hour-block-meta">31% · 🌖</div>
+        </div>
+        <div class="hour-block">
+          <div class="hour-block-time">18:00</div>
+          <div class="hour-block-bar">
+            <div class="hour-block-bar-inner" style="height: 60%;"></div>
+          </div>
+          <div class="hour-block-meta">39% · 🌖</div>
+        </div>
+        <div class="hour-block">
+          <div class="hour-block-time">19:00</div>
+          <div class="hour-block-bar">
+            <div class="hour-block-bar-inner" style="height: 85%;"></div>
+          </div>
+          <div class="hour-block-meta">12% · 🌗</div>
+        </div>
+        <div class="hour-block">
+          <div class="hour-block-time">20:00</div>
+          <div class="hour-block-bar">
+            <div class="hour-block-bar-inner" style="height: 95%;"></div>
+          </div>
+          <div class="hour-block-meta">2% · 🌗</div>
+        </div>
+        <div class="hour-block">
+          <div class="hour-block-time">21:00</div>
+          <div class="hour-block-bar">
+            <div class="hour-block-bar-inner" style="height: 100%;"></div>
+          </div>
+          <div class="hour-block-meta">0% · 🌗</div>
+        </div>
+        <div class="hour-block">
+          <div class="hour-block-time">22:00</div>
+          <div class="hour-block-bar">
+            <div class="hour-block-bar-inner" style="height: 92%;"></div>
+          </div>
+          <div class="hour-block-meta">4% · 🌘</div>
+        </div>
+        <div class="hour-block">
+          <div class="hour-block-time">23:00</div>
+          <div class="hour-block-bar">
+            <div class="hour-block-bar-inner" style="height: 80%;"></div>
+          </div>
+          <div class="hour-block-meta">9% · 🌘</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- DETAIL CARDS -->
+    <section class="detail-grid">
+      <div class="card">
+        <div class="detail-heading">Aurora activity</div>
+        <div class="detail-body" id="detail-aurora">
+          KP and geomagnetic latitude combine into an overall activity level. This is currently driven by your chosen KP slider value.
+        </div>
+      </div>
+      <div class="card">
+        <div class="detail-heading">Clouds</div>
+        <div class="detail-body" id="detail-clouds">
+          Cloud cover will eventually be pulled from a weather API. For now we assume “mostly clear (20%)” as a placeholder for testing layouts.
+        </div>
+      </div>
+      <div class="card">
+        <div class="detail-heading">Moon</div>
+        <div class="detail-body" id="detail-moon">
+          Moon phase and altitude will affect how washed-out the sky is. The hourly strip above is a rough mock; detailed modelling to follow.
+        </div>
+      </div>
+      <div class="card">
+        <div class="detail-heading">Darkness</div>
+        <div class="detail-body" id="detail-darkness">
+          Civil, nautical and astronomical twilight, plus sunset/sunrise, will be used to define the “dark window”. At the moment this panel is descriptive only.
+        </div>
+      </div>
+      <div class="card">
+        <div class="detail-heading">Light pollution</div>
+        <div class="detail-body" id="detail-lightpollution">
+          We estimate light pollution from your latitude/longitude as a simple heuristic. Later, this can be swapped for a proper sky brightness / Bortle data source.
+        </div>
+      </div>
+    </section>
+
+    <!-- TIP -->
+    <section class="card">
+      <div class="tip">
+        <strong>Tip:</strong> Give your eyes 20–30 minutes to adjust to the dark and avoid bright white
+        screens while watching for aurora.
+      </div>
+    </section>
 
     <div class="footer">
       <span id="footer-time"></span>
@@ -471,9 +844,8 @@
     </div>
   </div>
 
-  <!-- Logic: Light pollution + Aurora brain + app wiring -->
+  <!-- LIGHT POLLUTION MODULE -->
   <script>
-    // -------- Light pollution module (simple heuristic) --------
     (function (global) {
       "use strict";
 
@@ -516,7 +888,7 @@
         if (typeof lat === "number" && typeof lon === "number") {
           const absLat = Math.abs(lat);
           if (absLat > 66) {
-            heuristicNorm = 0.22; // very high latitude, often darker options
+            heuristicNorm = 0.22;
           } else if (absLat > 58) {
             heuristicNorm = 0.32;
           } else if (absLat > 50) {
@@ -553,8 +925,8 @@
     })(window);
   </script>
 
+  <!-- AURORA BRAIN MODULE -->
   <script>
-    // -------- Aurora brain module --------
     (function (global) {
       "use strict";
 
@@ -694,15 +1066,14 @@
     })(window);
   </script>
 
+  <!-- APP WIRING -->
   <script>
-    // -------- App wiring: location, UI, and brain --------
     (function () {
       "use strict";
 
       const locMainEl = document.getElementById("location-main");
       const locDetailEl = document.getElementById("location-detail");
       const locMetaEl = document.getElementById("location-meta");
-      const locSourcePillEl = document.getElementById("location-source-pill");
       const lpBadgeEl = document.querySelector("[data-role='light-pollution-badge']");
       const lpIndicatorInner = lpBadgeEl.querySelector(".lp-indicator-inner");
       const kpInputEl = document.getElementById("kp-input");
@@ -712,6 +1083,16 @@
       const verdictScoreEl = document.getElementById("verdict-score");
       const debugListEl = document.querySelector("[data-role='aurora-debug']");
       const footerTimeEl = document.getElementById("footer-time");
+      const searchInputEl = document.getElementById("search-input");
+      const searchButtonEl = document.getElementById("search-button");
+      const gpsButtonEl = document.getElementById("gps-button");
+
+      // Tonight + classic panels
+      const tonightTitleEl = document.getElementById("tonight-title");
+      const tonightLocationSubEl = document.getElementById("tonight-location-sub");
+      const tonightChanceEl = document.getElementById("tonight-chance");
+      const tonightGeomagEl = document.getElementById("tonight-geomag");
+      const chipAuroraEl = document.getElementById("chip-aurora");
 
       const state = {
         lat: null,
@@ -720,7 +1101,9 @@
         distanceToOvalKm: null,
         lightPollution: 0.5,
         kp: parseFloat(kpInputEl.value) || 3.5,
-        cloudCover: null
+        cloudCover: null,
+        locationShort: "your location",
+        usingIp: false
       };
 
       function updateFooterTime() {
@@ -734,17 +1117,15 @@
       }
 
       function approxGeomagneticLatitude(lat) {
-        // Simple approximation – good enough for our demo:
-        // subtract 11 degrees in Europe-ish longitudes, otherwise just use lat.
         if (typeof lat !== "number") return null;
-        return lat - 11;
+        return lat - 11; // simple approximation
       }
 
       function approxDistanceToOvalKm(geomagLat) {
         if (typeof geomagLat !== "number") return null;
-        const ovalLat = 67; // typical auroral oval latitude
+        const ovalLat = 67;
         const deltaLat = Math.abs(geomagLat - ovalLat);
-        return deltaLat * 111; // rough km per degree
+        return deltaLat * 111;
       }
 
       function setLocationDisplay(options) {
@@ -753,17 +1134,19 @@
           labelDetail,
           sourceLabel,
           sourceKind,
-          coordsText
+          coordsText,
+          shortLabel
         } = options;
 
         if (labelMain) locMainEl.textContent = labelMain;
         if (labelDetail) locDetailEl.textContent = labelDetail;
 
+        state.locationShort = shortLabel || labelMain || "your location";
+
         locMetaEl.innerHTML = "";
 
         const src = document.createElement("span");
         src.className = "meta-pill";
-        src.id = "location-source-pill";
         src.textContent = `Source: ${sourceLabel}`;
         locMetaEl.appendChild(src);
 
@@ -778,9 +1161,13 @@
           src.style.borderColor = "rgba(234,179,8,0.9)";
         } else if (sourceKind === "gps") {
           src.style.borderColor = "rgba(34,197,94,0.9)";
-        } else {
-          src.style.borderColor = "rgba(148,163,184,0.5)";
+        } else if (sourceKind === "search") {
+          src.style.borderColor = "rgba(56,189,248,0.9)";
         }
+
+        // Update tonight header
+        tonightTitleEl.textContent = `Tonight at ${state.locationShort}`;
+        tonightLocationSubEl.textContent = "Tonight’s view based on current KP and a simple sky model.";
       }
 
       function renderLightPollutionBadge(lpResult) {
@@ -807,10 +1194,40 @@
           normalized * 100
         ).toFixed(0)} / 100 (0 = dark, 100 = very bright)`;
 
-        const darkHeight = 10; // darkest
-        const brightHeight = 90; // brightest
+        const darkHeight = 10;
+        const brightHeight = 90;
         const height = darkHeight + (brightHeight - darkHeight) * normalized;
         lpIndicatorInner.style.height = `${height}%`;
+      }
+
+      function updateTonightSummary(result) {
+        // chance text
+        let label = "Low chance";
+        let cls = "chance-low";
+
+        if (result.verdict === "yes") {
+          label = "Good chance";
+          cls = "chance-high";
+        } else if (result.verdict === "maybe") {
+          label = "Low to moderate chance";
+          cls = "chance-medium";
+        }
+
+        tonightChanceEl.textContent = label;
+        tonightChanceEl.className = `tonight-chance ${cls}`;
+
+        const kp = state.kp;
+        let activityText = "Low";
+        if (kp >= 7) activityText = "Very high";
+        else if (kp >= 5) activityText = "High";
+        else if (kp >= 3.5) activityText = "Moderate";
+
+        chipAuroraEl.textContent = activityText;
+
+        tonightGeomagEl.textContent =
+          `KP index ${kp.toFixed(1)} with your latitude gives a ` +
+          `${activityText.toLowerCase()} level of geomagnetic activity; ` +
+          `clouds and moonlight are still placeholders here.`;
       }
 
       function renderAuroraVerdict(result) {
@@ -839,6 +1256,8 @@
             debugListEl.appendChild(li);
           });
         }
+
+        updateTonightSummary(result);
       }
 
       function recomputeAurora() {
@@ -921,7 +1340,8 @@
               labelDetail: "Location estimated from your network (IP).",
               sourceLabel: "IP-based (approximate)",
               sourceKind: "ip",
-              coordsText
+              coordsText,
+              shortLabel: `Near ${city}`
             });
 
             if (state.lat != null && state.lon != null) {
@@ -945,7 +1365,7 @@
           });
       }
 
-      function initLocation() {
+      function initLocationViaGps() {
         if (!navigator.geolocation) {
           useIpLocationFallback();
           return;
@@ -967,7 +1387,8 @@
                 "Using your device’s location services. This is typically accurate to a few hundred metres.",
               sourceLabel: "Device location (precise)",
               sourceKind: "gps",
-              coordsText
+              coordsText,
+              shortLabel: "Your device location"
             });
 
             updateLightPollution(latitude, longitude);
@@ -984,10 +1405,75 @@
         );
       }
 
+      function geocodeSearch(query) {
+        const url =
+          "https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=" +
+          encodeURIComponent(query);
+
+        searchButtonEl.disabled = true;
+        fetch(url, { headers: { "Accept-Language": "en" } })
+          .then((res) => res.json())
+          .then((results) => {
+            if (!results || !results.length) {
+              alert("No results found for that place.");
+              return;
+            }
+
+            const r = results[0];
+            const lat = parseFloat(r.lat);
+            const lon = parseFloat(r.lon);
+
+            state.lat = lat;
+            state.lon = lon;
+
+            const name = r.display_name.split(",")[0];
+            const coordsText = `${lat.toFixed(3)}°, ${lon.toFixed(3)}°`;
+
+            setLocationDisplay({
+              labelMain: name,
+              labelDetail: "Location chosen via search.",
+              sourceLabel: "Manual search",
+              sourceKind: "search",
+              coordsText,
+              shortLabel: name
+            });
+
+            updateLightPollution(lat, lon);
+          })
+          .catch((err) => {
+            console.error("Search failed", err);
+            alert("Search failed – please try again or use GPS / IP.");
+          })
+          .finally(() => {
+            searchButtonEl.disabled = false;
+          });
+      }
+
       function init() {
         updateFooterTime();
         kpInputEl.addEventListener("input", onKpChange);
-        initLocation();
+
+        gpsButtonEl.addEventListener("click", () => {
+          initLocationViaGps();
+        });
+
+        searchButtonEl.addEventListener("click", () => {
+          const q = searchInputEl.value.trim();
+          if (!q) return;
+          geocodeSearch(q);
+        });
+
+        searchInputEl.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            const q = searchInputEl.value.trim();
+            if (!q) return;
+            geocodeSearch(q);
+          }
+        });
+
+        // Start with IP fallback; GPS button lets user override
+        useIpLocationFallback();
         onKpChange();
       }
 
