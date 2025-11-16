@@ -2,7 +2,7 @@
 // - LightPollution module
 // - AuroraBrain scoring
 // - Simple solar darkness model
-// - App wiring (location, KP slider, panels, sky brightness override)
+// - App wiring (location, KP slider, panels, sky brightness override, hourly chart)
 
 (function () {
   "use strict";
@@ -479,6 +479,8 @@
     const gpsButtonEl = document.getElementById("gps-button");
     const lpModeOptionsEl = document.getElementById("lp-mode-options");
     const lpModeHintEl = document.getElementById("lp-mode-hint");
+    const hourlyBarEl = document.getElementById("hourly-bar");
+    const nextDarkSubtitleEl = document.getElementById("next-dark-subtitle");
 
     // Tonight / classic panels
     const tonightTitleEl = document.getElementById("tonight-title");
@@ -605,10 +607,18 @@
         chipDarknessEl.textContent = "Dark all day at this time of year.";
         detailDarknessEl.textContent =
           "At your latitude and on this date the Sun stays well below the horizon, so the sky is effectively dark all day. Aurora visibility will be limited mainly by weather and light pollution.";
+        if (nextDarkSubtitleEl) {
+          nextDarkSubtitleEl.textContent =
+            "Viewing chance across representative hours – the sky stays fully dark at this time of year.";
+        }
       } else if (darkness.neverDark) {
         chipDarknessEl.textContent = "Sky never gets fully dark tonight.";
         detailDarknessEl.textContent =
           "The Sun never reaches full astronomical darkness (18° below the horizon) at this time of year. Very bright aurora may still be visible in the darkest hours.";
+        if (nextDarkSubtitleEl) {
+          nextDarkSubtitleEl.textContent =
+            "Late-night hours at this latitude; the sky stays in bright twilight rather than full darkness.";
+        }
       } else if (darkness.hasAstronomicalNight) {
         const start = formatHourLocal(darkness.astroDusk);
         const end = formatHourLocal(darkness.astroDawn);
@@ -625,16 +635,29 @@
 
         detailDarknessEl.textContent =
           `We approximate astronomical-night when the Sun is 18° below the horizon. For today that gives a dark window from about ${start}–${end}${extra}. Times are approximate.`;
+
+        if (nextDarkSubtitleEl) {
+          nextDarkSubtitleEl.textContent =
+            `Approximate aurora visibility score across the main dark window tonight (${start}–${end}).`;
+        }
       } else if (darkness.hasDay) {
         const sunriseStr = formatHourLocal(darkness.sunrise);
         const sunsetStr = formatHourLocal(darkness.sunset);
         chipDarknessEl.textContent = `Roughly dark between sunset ${sunsetStr} and sunrise ${sunriseStr}.`;
         detailDarknessEl.textContent =
           "We estimate sunrise and sunset with a simple solar model based on your latitude, longitude and date. In a future version we’ll refine twilight handling further.";
+        if (nextDarkSubtitleEl) {
+          nextDarkSubtitleEl.textContent =
+            "Aurora visibility score across the next few hours, using a simple solar darkness model.";
+        }
       } else {
         chipDarknessEl.textContent = "Darkness timings unavailable.";
         detailDarknessEl.textContent =
           "We couldn’t estimate darkness timings for this location and date.";
+        if (nextDarkSubtitleEl) {
+          nextDarkSubtitleEl.textContent =
+            "Prototype bar chart – darkness timings are unavailable for this location.";
+        }
       }
     }
 
@@ -763,12 +786,113 @@
       updateTonightSummary(result);
     }
 
+    function renderHourlyChart(darkness, baseInputs) {
+      if (!hourlyBarEl) return;
+
+      hourlyBarEl.innerHTML = "";
+
+      if (!state.lat || !state.lon || !darkness) {
+        // If we don't have enough info, show a simple placeholder.
+        for (let i = 0; i < 8; i++) {
+          const block = document.createElement("div");
+          block.className = "hour-block";
+          block.innerHTML = `
+            <div class="hour-block-time">--:--</div>
+            <div class="hour-block-bar">
+              <div class="hour-block-bar-inner" style="height: 50%;"></div>
+            </div>
+            <div class="hour-block-meta">Waiting for location…</div>
+          `;
+          hourlyBarEl.appendChild(block);
+        }
+        return;
+      }
+
+      const now = new Date();
+      const hourNow = now.getHours() + now.getMinutes() / 60;
+
+      const hours = [];
+      if (darkness.hasAstronomicalNight && darkness.astroDusk != null && darkness.astroDawn != null) {
+        // Start from the nearest full hour to the beginning of the dark window
+        let startHour = Math.round(darkness.astroDusk);
+        for (let i = 0; i < 8; i++) {
+          hours.push(wrapHour(startHour + i));
+        }
+      } else if (darkness.alwaysAstronomicalDark || darkness.alwaysNight) {
+        // Always dark: show the next 8 hours from now
+        let startHour = Math.floor(hourNow);
+        for (let i = 0; i < 8; i++) {
+          hours.push(wrapHour(startHour + i));
+        }
+      } else {
+        // No full darkness: still show the next 8 hours, but label accordingly
+        let startHour = Math.floor(hourNow);
+        for (let i = 0; i < 8; i++) {
+          hours.push(wrapHour(startHour + i));
+        }
+      }
+
+      hours.forEach((h) => {
+        const localHour = h;
+        const timeLabel = formatHourLocal(localHour);
+
+        const inputs = {
+          kp: baseInputs.kp,
+          distanceToOvalKm: baseInputs.distanceToOvalKm,
+          geomagneticLatitude: baseInputs.geomagneticLatitude,
+          lightPollution: baseInputs.lightPollution,
+          cloudCover: baseInputs.cloudCover,
+          timeLocalHour: localHour
+        };
+
+        let brain = AuroraBrain.computeBrain(inputs);
+        let score = brain.score;
+
+        // Apply a simple darkness weighting on top of the brain score
+        if (darkness.hasAstronomicalNight && darkness.astroDusk != null && darkness.astroDawn != null) {
+          const inDark = isHourBetween(localHour, darkness.astroDusk, darkness.astroDawn);
+          if (!inDark) {
+            score *= 0.3;
+          }
+        } else if (darkness.neverDark) {
+          score *= 0.5;
+        }
+
+        const scoreRounded = Math.round(score);
+        const barHeight = Math.max(8, Math.min(100, scoreRounded));
+
+        let isDayHour = false;
+        if (darkness.hasDay && darkness.sunrise != null && darkness.sunset != null) {
+          isDayHour = isHourBetween(localHour, darkness.sunrise, darkness.sunset);
+        } else if (darkness.alwaysDaylight) {
+          isDayHour = true;
+        }
+
+        const skyIcon = isDayHour ? "☀︎" : "🌙";
+        const metaText = `${scoreRounded}% · ☁︎ · ${skyIcon}`;
+
+        const block = document.createElement("div");
+        block.className = "hour-block";
+        block.innerHTML = `
+          <div class="hour-block-time">${timeLabel}</div>
+          <div class="hour-block-bar">
+            <div class="hour-block-bar-inner" style="height: ${100 - barHeight}%;"></div>
+          </div>
+          <div class="hour-block-meta">${metaText}</div>
+        `;
+        hourlyBarEl.appendChild(block);
+      });
+    }
+
     function recomputeAurora() {
       if (state.lat == null || state.lon == null) {
         verdictTextEl.textContent =
           "We’re still waiting for a location before we can score your chances.";
         verdictScoreEl.textContent = "Score — / 100";
         verdictContainer.dataset.state = "";
+        if (hourlyBarEl) {
+          hourlyBarEl.innerHTML = "";
+        }
         return;
       }
 
@@ -794,12 +918,18 @@
       state.geomagneticLatitude = geomagLat;
       state.distanceToOvalKm = distanceKm;
 
-      const result = AuroraBrain.computeBrain({
+      const baseInputs = {
         kp: state.kp,
         distanceToOvalKm: distanceKm,
         geomagneticLatitude: geomagLat,
         lightPollution: state.lightPollution,
-        cloudCover: state.cloudCover,
+        cloudCover: state.cloudCover
+      };
+
+      renderHourlyChart(darkness, baseInputs);
+
+      const result = AuroraBrain.computeBrain({
+        ...baseInputs,
         timeLocalHour: localHour
       });
 
