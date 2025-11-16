@@ -1,7 +1,7 @@
 // A2KDA Aurora - main app logic
 // - LightPollution module
 // - AuroraBrain scoring
-// - App wiring (location, KP slider, panels)
+// - App wiring (location, KP slider, panels, sky brightness override)
 
 (function () {
   "use strict";
@@ -238,6 +238,8 @@
     const searchInputEl = document.getElementById("search-input");
     const searchButtonEl = document.getElementById("search-button");
     const gpsButtonEl = document.getElementById("gps-button");
+    const lpModeOptionsEl = document.getElementById("lp-mode-options");
+    const lpModeHintEl = document.getElementById("lp-mode-hint");
 
     // Tonight / classic panels
     const tonightTitleEl = document.getElementById("tonight-title");
@@ -252,6 +254,8 @@
       geomagneticLatitude: null,
       distanceToOvalKm: null,
       lightPollution: 0.5,
+      autoLightPollution: 0.5,
+      lpMode: "auto", // 'auto' | 'dark' | 'suburban' | 'urban'
       kp: parseFloat(kpInputEl.value) || 3.5,
       cloudCover: null,
       locationShort: "your location"
@@ -500,19 +504,29 @@
           normalized = Math.min(normalized, 0.25);
         }
 
-        const adjusted = {
-          ...result,
-          normalized,
-          classification: LightPollution.classifyLightPollutionValue(normalized)
-        };
+        // Store auto-estimate regardless of current mode
+        state.autoLightPollution = normalized;
 
-        state.lightPollution = normalized;
-        renderLightPollutionBadge(adjusted);
+        if (state.lpMode === "auto") {
+          state.lightPollution = normalized;
+          const adjusted = {
+            ...result,
+            normalized,
+            classification: LightPollution.classifyLightPollutionValue(normalized)
+          };
+          renderLightPollutionBadge(adjusted);
+        }
+
+        // If we're in manual mode, we do not override the user's chosen value,
+        // but we still recompute from that.
         recomputeAurora();
       } catch (err) {
         console.error("Failed to estimate light pollution", err);
-        state.lightPollution = 0.5;
-        renderLightPollutionBadge(null);
+        state.autoLightPollution = 0.5;
+        if (state.lpMode === "auto") {
+          state.lightPollution = 0.5;
+          renderLightPollutionBadge(null);
+        }
         recomputeAurora();
       }
     }
@@ -703,6 +717,59 @@
         });
     }
 
+    function handleLpModeClick(e) {
+      const btn = e.target.closest(".lp-mode-btn");
+      if (!btn) return;
+
+      const mode = btn.getAttribute("data-mode");
+      if (!mode || !["auto", "dark", "suburban", "urban"].includes(mode)) return;
+
+      state.lpMode = mode;
+
+      // Update button active styles
+      const buttons = lpModeOptionsEl.querySelectorAll(".lp-mode-btn");
+      buttons.forEach((b) => {
+        if (b === btn) {
+          b.classList.add("lp-mode-btn-active");
+        } else {
+          b.classList.remove("lp-mode-btn-active");
+        }
+      });
+
+      let norm;
+      if (mode === "auto") {
+        norm = state.autoLightPollution;
+        state.lightPollution = norm;
+        lpModeHintEl.textContent =
+          "Auto is a rough guess from your location. Adjust if you know your local sky.";
+      } else if (mode === "dark") {
+        norm = 0.2;
+        state.lightPollution = norm;
+        lpModeHintEl.textContent =
+          "Using your chosen sky brightness: dark rural skies.";
+      } else if (mode === "suburban") {
+        norm = 0.5;
+        state.lightPollution = norm;
+        lpModeHintEl.textContent =
+          "Using your chosen sky brightness: typical suburban or small-town skies.";
+      } else if (mode === "urban") {
+        norm = 0.85;
+        state.lightPollution = norm;
+        lpModeHintEl.textContent =
+          "Using your chosen sky brightness: bright city or town-centre skies.";
+      }
+
+      if (typeof norm === "number") {
+        const manualResult = {
+          normalized: norm,
+          classification: LightPollution.classifyLightPollutionValue(norm)
+        };
+        renderLightPollutionBadge(manualResult);
+      }
+
+      recomputeAurora();
+    }
+
     function init() {
       updateFooterTime();
       kpInputEl.addEventListener("input", onKpChange);
@@ -726,7 +793,11 @@
         }
       });
 
-      // NEW: default flow is GPS → IP → Isle of Rùm
+      if (lpModeOptionsEl) {
+        lpModeOptionsEl.addEventListener("click", handleLpModeClick);
+      }
+
+      // Default flow is GPS → IP → Isle of Rùm
       initLocationViaGps();
       onKpChange();
     }
