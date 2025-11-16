@@ -154,3 +154,13 @@ body {
   font-size: 12px;
   color: #90a4ae;
 }
+
+.loading,
+.error {
+  max-width: 480px;
+  margin: 32px auto;
+  padding: 16px;
+  font-size: 14px;
+  text-align: center;
+  color: #cfd8dc;
+}
