@@ -1,5 +1,6 @@
 // Simple React app using CDN React/ReactDOM (no build step)
-// This version fetches real weather + space-weather data where possible.
+// This version fetches real weather + space-weather data where possible,
+// uses GPS -> IP -> Isle of Rùm fallback for location, and shows only dark hours.
 
 // --- Types (JSDoc-style comments just for clarity) ---
 
@@ -12,7 +13,8 @@
  * @property {number} latitude
  * @property {number} longitude
  * @property {string} timezone
- * @property {"gps"|"manual"} source
+ * @property {"gps"|"manual"|"ip"} source
+ * @property {string} [sourceHint] // "gps" | "ip" | "rum-default"
  */
 
 /**
@@ -53,7 +55,7 @@
  * @property {string} time
  * @property {ViewingChanceScore} score
  * @property {number} cloudsPercent
- * @property {boolean} moonAboveHorizon
+ * @property {string} moonIcon
  */
 
 /**
@@ -93,28 +95,124 @@ function formatLocalDateTime(iso, timeZone) {
   }).format(d);
 }
 
-// --- Data fetching helpers ---
+// --- Moon phase helper (approximate) ---
 
 /**
- * Try to get user location via browser geolocation.
- * Falls back to Inverness, UK if not available.
- * @returns {Promise<UserLocation & { usedFallback?: boolean }>}
+ * Return moon phase fraction 0–1 (0 = new, 0.5 = full, 1 ~ new again)
+ * @param {Date} date
+ */
+function moonPhaseFraction(date) {
+  const synodicMonth = 29.53058867; // days
+  const knownNewMoon = Date.UTC(2000, 0, 6, 18, 14); // reference new moon
+  const diffDays = (date.getTime() - knownNewMoon) / 86400000;
+  let phase = diffDays / synodicMonth;
+  phase = phase - Math.floor(phase);
+  if (phase < 0) phase += 1;
+  return phase;
+}
+
+/**
+ * Map moon phase fraction to an emoji icon.
+ * @param {number} phase
+ */
+function moonPhaseIcon(phase) {
+  if (phase < 0.0625 || phase > 0.9375) return "🌑"; // new
+  if (phase < 0.1875) return "🌒";
+  if (phase < 0.3125) return "🌓";
+  if (phase < 0.4375) return "🌔";
+  if (phase < 0.5625) return "🌕"; // full
+  if (phase < 0.6875) return "🌖";
+  if (phase < 0.8125) return "🌗";
+  return "🌘";
+}
+
+// --- Cloud icon helper (based on % cover, focused on sky transparency) ---
+
+function cloudIconForPercent(pct) {
+  if (pct <= 10) return "✨";      // essentially clear
+  if (pct <= 40) return "🌤";      // thin / broken cloud
+  if (pct <= 80) return "☁️";      // cloudy
+  return "🌧";                     // very overcast / sky mostly blocked
+}
+
+// --- Location helpers: GPS -> IP -> Isle of Rùm ---
+
+/**
+ * Fallback location: Isle of Rùm, Scotland (dark-sky sanctuary)
+ * @returns {UserLocation}
+ */
+function rumFallbackLocation() {
+  return {
+    id: "fallback-rum",
+    name: "Isle of Rùm",
+    country: "United Kingdom",
+    region: "Scotland",
+    latitude: 56.99,
+    longitude: -6.33,
+    timezone: "Europe/London",
+    source: "manual",
+    sourceHint: "rum-default",
+  };
+}
+
+/**
+ * Use IP-based geolocation as an approximate fallback.
+ * Uses a public IP geolocation service (accuracy varies).
+ * @returns {Promise<UserLocation|null>}
+ */
+async function fetchIpLocation() {
+  try {
+    const res = await fetch("https://ipapi.co/json/");
+    if (!res.ok) throw new Error("IP geo failed");
+    const data = await res.json();
+    if (
+      typeof data.latitude !== "number" ||
+      typeof data.longitude !== "number"
+    ) {
+      return null;
+    }
+    const name =
+      data.city && data.city.length > 0
+        ? "Near " + data.city
+        : "Your region";
+    return {
+      id: "ip-location",
+      name: name,
+      country: data.country_name || "",
+      region: data.region || "",
+      latitude: data.latitude,
+      longitude: data.longitude,
+      timezone: data.timezone || "UTC",
+      source: "ip",
+      sourceHint: "ip",
+    };
+  } catch (e) {
+    console.error("IP-based location failed", e);
+    return null;
+  }
+}
+
+/**
+ * Try to get user location via browser geolocation first.
+ * If that fails, try IP-based location. If that fails,
+ * fall back to Isle of Rùm.
+ * @returns {Promise<UserLocation>}
  */
 function getUserLocation() {
   return new Promise(function (resolve) {
+    function useIpThenRum() {
+      fetchIpLocation()
+        .then(function (ipLoc) {
+          if (ipLoc) resolve(ipLoc);
+          else resolve(rumFallbackLocation());
+        })
+        .catch(function () {
+          resolve(rumFallbackLocation());
+        });
+    }
+
     if (!("geolocation" in navigator)) {
-      // Fallback: Inverness, UK
-      resolve({
-        id: "fallback-inverness",
-        name: "Near Inverness",
-        country: "United Kingdom",
-        region: "Scotland",
-        latitude: 57.4778,
-        longitude: -4.2247,
-        timezone: "Europe/London",
-        source: "manual",
-        usedFallback: true,
-      });
+      useIpThenRum();
       return;
     }
 
@@ -130,30 +228,22 @@ function getUserLocation() {
           timezone:
             Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
           source: "gps",
-          usedFallback: false,
+          sourceHint: "gps",
         });
       },
       function () {
-        // Fallback: Inverness, UK
-        resolve({
-          id: "fallback-inverness",
-          name: "Near Inverness",
-          country: "United Kingdom",
-          region: "Scotland",
-          latitude: 57.4778,
-          longitude: -4.2247,
-          timezone: "Europe/London",
-          source: "manual",
-          usedFallback: true,
-        });
+        // Geolocation failed or denied
+        useIpThenRum();
       },
       { enableHighAccuracy: false, timeout: 15000 }
     );
   });
 }
 
+// --- Data fetching helpers ---
+
 /**
- * Fetch weather (cloud cover + sunrise/sunset) from Open-Meteo.
+ * Fetch weather (cloud cover + sunrise/sunset + is_day) from Open-Meteo.
  * @param {UserLocation} location
  */
 async function fetchWeather(location) {
@@ -163,7 +253,7 @@ async function fetchWeather(location) {
     encodeURIComponent(location.latitude) +
     "&longitude=" +
     encodeURIComponent(location.longitude) +
-    "&hourly=cloud_cover" +
+    "&hourly=cloud_cover,is_day" +
     "&daily=sunrise,sunset" +
     "&forecast_days=1" +
     "&timezone=auto";
@@ -263,9 +353,15 @@ function buildForecast(location, weatherData, spaceWeather) {
   ) {
     const times = weatherData.hourly.time;
     const clouds = weatherData.hourly.cloud_cover;
+    const isDayArray = weatherData.hourly.is_day || [];
+
     for (let i = 0; i < times.length; i++) {
       const t = new Date(times[i]);
-      // Limit to next ~8 hours
+
+      // Skip if it's daytime according to is_day flag
+      if (isDayArray.length && isDayArray[i] === 1) continue;
+
+      // Limit to next ~8 dark hours
       if (t.getTime() >= now && hourly.length < 8) {
         const cloud = clouds[i];
         const base =
@@ -284,24 +380,28 @@ function buildForecast(location, weatherData, spaceWeather) {
         else if (scoreValue >= 5) category = "Good";
         else if (scoreValue >= 3) category = "Low";
 
+        const phase = moonPhaseFraction(t);
+        const moonIcon = moonPhaseIcon(phase);
+
         hourly.push({
           time: times[i],
           score: { value: scoreValue, category: category },
           cloudsPercent: cloud,
-          moonAboveHorizon: false, // placeholder for now
+          moonIcon: moonIcon,
         });
       }
     }
   }
 
-  // If we somehow have no hours, create a very simple fallback single hour
+  // If we somehow have no dark hours, create a very simple fallback single hour
   if (hourly.length === 0) {
     const fallbackTime = new Date(now + 60 * 60 * 1000).toISOString();
+    const phase = moonPhaseFraction(new Date(fallbackTime));
     hourly.push({
       time: fallbackTime,
       score: { value: 3, category: "Low" },
       cloudsPercent: 50,
-      moonAboveHorizon: false,
+      moonIcon: moonPhaseIcon(phase),
     });
   }
 
@@ -407,7 +507,7 @@ function buildForecast(location, weatherData, spaceWeather) {
     conditions: {
       auroraActivity: auroraActivity,
       cloudsText: cloudsText,
-      moonText: "Moon data coming soon",
+      moonText: "Moon phase shown per hour; altitude/horizon coming soon",
       darknessText: darknessText,
       lightPollutionText: "Light pollution not yet included",
     },
@@ -561,12 +661,15 @@ function Timeline({ hours, locationTimezone }) {
     React.createElement(
       "div",
       { style: { fontSize: 13, marginBottom: 8 } },
-      "Next hours – bar: viewing chance • ☁: cloud cover"
+      "Next dark hours – bar: viewing chance • ",
+      "☁: cloud cover • ",
+      "🌙: moon phase"
     ),
     React.createElement(
       "div",
       { className: "timeline-hours" },
       hours.map(function (h) {
+        const cloudIcon = cloudIconForPercent(h.cloudsPercent);
         return React.createElement(
           "div",
           { key: h.time, className: "timeline-hour" },
@@ -588,15 +691,21 @@ function Timeline({ hours, locationTimezone }) {
           ),
           React.createElement(
             "div",
-            { style: { marginTop: 4 } },
-            "☁️ ",
+            {
+              style: {
+                marginTop: 4,
+                whiteSpace: "nowrap", // keep icon + % on one line
+              },
+            },
+            cloudIcon,
+            " ",
             String(Math.round(h.cloudsPercent)),
             "%"
           ),
           React.createElement(
             "div",
-            null,
-            h.moonAboveHorizon ? "🌙" : " "
+            { style: { marginTop: 2 } },
+            h.moonIcon
           )
         );
       })
@@ -654,7 +763,7 @@ function TonightScreen() {
     ovation: "missing",
     lightPollution: "missing",
     notes: [
-      "Light pollution and moon data are not yet included in the calculations.",
+      "Light pollution and detailed moon altitude are not yet included in the calculations.",
     ],
   });
   const [error, setError] = useState(null);
@@ -675,19 +784,24 @@ function TonightScreen() {
           ovation: "missing",
           lightPollution: "missing",
           notes: [
-            "Light pollution and moon data are not yet included in the calculations.",
+            "Light pollution and detailed moon altitude are not yet included in the calculations.",
           ],
         };
 
-        if (loc.usedFallback) {
+        if (loc.sourceHint === "gps") {
+          setLocationSourceLabel("Location from your device GPS");
+        } else if (loc.sourceHint === "ip") {
+          setLocationSourceLabel("Location estimated from your network (IP)");
           avail.notes.push(
-            "We couldn't get your precise device location; using a default location near Inverness, Scotland instead."
+            "Your approximate location was estimated from your internet connection."
           );
+        } else if (loc.sourceHint === "rum-default") {
           setLocationSourceLabel(
-            "Using fallback location (Near Inverness, Scotland)"
+            "Default dark-sky location (Isle of Rùm, Scotland)"
           );
-        } else {
-          setLocationSourceLabel("Using device location");
+          avail.notes.push(
+            "We couldn't get your device or IP-based location; using a default dark-sky location on the Isle of Rùm, Scotland."
+          );
         }
 
         let weatherData = null;
