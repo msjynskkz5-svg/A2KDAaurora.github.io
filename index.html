@@ -1,245 +1,436 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <title>A2KDA Aurora</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="stylesheet" href="styles.css" />
-</head>
-<body>
-  <div class="app">
-    <div class="aurora-glow"></div>
-
-    <header>
-      <div class="title-block">
-        <h1>A2KDA Aurora</h1>
-        <p>See at-a-glance if there’s a realistic chance of aurora from where you are.</p>
-      </div>
-      <div class="pill">
-        <span class="pill-dot"></span>
-        <span>Live location &amp; sky brightness</span>
-      </div>
-    </header>
-
-    <!-- LOCATION CARD -->
-    <section class="card" id="location-card">
-      <div class="card-header">
-        <div>
-          <div class="card-title">Location</div>
-          <div class="card-subtitle">
-            Used to estimate both aurora visibility and light pollution.
-          </div>
-        </div>
-      </div>
-
-      <div class="location-main" id="location-main">
-        Working out where you are…
-      </div>
-      <div class="location-detail" id="location-detail">
-        Trying your device’s GPS first, then falling back to an approximate IP-based lookup.
-      </div>
-      <div class="location-meta" id="location-meta">
-        <span class="meta-pill" id="location-source-pill">Source: detecting…</span>
-      </div>
-
-      <div class="search-row">
-        <input
-          type="text"
-          id="search-input"
-          placeholder="Search place…"
-          autocomplete="off"
-        />
-        <button class="btn" id="search-button">Search</button>
-        <button class="btn btn-primary" id="gps-button">Use device GPS / IP</button>
-      </div>
-
-      <div
-        class="lp-badge lp-badge-unknown"
-        data-role="light-pollution-badge"
-        title="Light pollution estimate will update once we have a location."
-      >
-        <div class="lp-indicator">
-          <div class="lp-indicator-inner" style="height: 50%;"></div>
-        </div>
-        <span class="lp-badge-label-strong">Light pollution:</span>
-        <span class="lp-badge-label">estimating…</span>
-      </div>
-
-      <div class="lp-mode-controls">
-        <div class="lp-mode-label">Sky brightness</div>
-        <div class="lp-mode-options" id="lp-mode-options">
-          <button class="lp-mode-btn lp-mode-btn-active" data-mode="auto">Auto</button>
-          <button class="lp-mode-btn" data-mode="dark">Dark rural</button>
-          <button class="lp-mode-btn" data-mode="suburban">Suburban</button>
-          <button class="lp-mode-btn" data-mode="urban">Bright city</button>
-        </div>
-        <div class="lp-mode-hint" id="lp-mode-hint">
-          Auto is a rough guess from your location. Adjust if you know your local sky.
-        </div>
-      </div>
-    </section>
-
-    <!-- DATA STATUS BANNER -->
-    <section class="status-banner card" id="status-banner">
-      <div class="status-banner-title">Data status:</div>
-      <ul>
-        <li>Light pollution <strong>is included</strong> using a simple model or, when available, a grid derived from the World Atlas of Artificial Night Sky Brightness, plus an optional manual override.</li>
-        <li>Moon altitude, detailed darkness and cloud data are still placeholders and not yet used in the main score.</li>
-        <li>Your approximate location may be estimated from your internet connection if device GPS is not available; as a last resort we fall back to the Isle of Rùm.</li>
-      </ul>
-    </section>
-
-    <!-- KP + VERDICT -->
-    <section class="grid-two">
-      <section class="card">
-        <div class="card-header">
+  <head>
+    <meta charset="utf-8" />
+    <title>Aurora from here</title>
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <meta
+      name="description"
+      content="See at-a-glance if there’s a realistic chance of aurora from your location, factoring in KP, distance from the auroral oval, light pollution, clouds, Moon and darkness."
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="app-header">
+        <div class="app-header-inner">
           <div>
-            <div class="card-title">Aurora activity (KP)</div>
-            <div class="card-subtitle">
-              For now you can tweak KP manually to explore “what if?” scenarios.
-            </div>
+            <h1 class="app-title">Aurora visibility from here</h1>
+            <p class="app-subtitle">
+              See at-a-glance if there’s a realistic chance of aurora from
+              where you are.
+            </p>
+          </div>
+          <div class="header-meta">
+            <p id="footer-time" class="footer-time">
+              Detecting your local time…
+            </p>
           </div>
         </div>
+      </header>
 
-        <div class="slider-row">
-          <label for="kp-input">KP</label>
-          <input type="range" id="kp-input" min="0" max="9" step="0.1" value="3.5" />
-          <span class="kp-value" id="kp-value">KP 3.5</span>
-        </div>
-        <div class="hint">
-          In the full app this will be driven by live space weather data (e.g. NOAA SWPC forecasts).
-        </div>
-      </section>
+      <main class="app-main">
+        <!-- LOCATION & CONTROLS -->
+        <section class="card card-location">
+          <div class="card-header">
+            <h2 class="card-title">Where are we scoring?</h2>
+            <p class="card-subtitle">
+              We try your device GPS first, then fall back to IP location or a
+              dark-sky default if needed.
+            </p>
+          </div>
 
-      <section class="card">
-        <div class="card-header">
-          <div>
-            <div class="card-title">Aurora visibility from here</div>
-            <div class="card-subtitle">
-              Takes into account KP, your distance from the auroral oval, sky brightness, and local time.
+          <div class="card-body location-grid">
+            <div class="location-text">
+              <div id="location-main" class="location-main">
+                Detecting location…
+              </div>
+              <div id="location-detail" class="location-detail">
+                Trying device GPS first, then IP-based location, or a dark-sky
+                fallback on the Isle of Rùm.
+              </div>
+              <div id="location-meta" class="location-meta"></div>
+            </div>
+
+            <div class="location-controls">
+              <div class="location-buttons">
+                <button id="gps-button" class="btn btn-primary">
+                  Use device GPS / IP
+                </button>
+              </div>
+
+              <div class="location-search">
+                <label class="field-label" for="search-input">
+                  Or search for a place
+                </label>
+                <div class="search-row">
+                  <input
+                    id="search-input"
+                    class="input"
+                    type="text"
+                    placeholder="e.g. Tromsø, Atacama Desert, London"
+                    autocomplete="off"
+                  />
+                  <button id="search-button" class="btn btn-secondary">
+                    Search
+                  </button>
+                </div>
+                <p class="field-hint">
+                  You can search for cities, towns, or known dark-sky sites.
+                </p>
+              </div>
             </div>
           </div>
-        </div>
+        </section>
 
-        <div class="verdict" data-role="aurora-verdict" data-state="">
-          <div class="verdict-main">
-            <div class="verdict-text" id="verdict-text">
-              Waiting for enough info to score your chances…
+        <!-- KP & LIGHT POLLUTION -->
+        <section class="card card-kp-lp">
+          <div class="card-body kp-lp-grid">
+            <div class="kp-column">
+              <h2 class="card-title">Geomagnetic activity (KP)</h2>
+              <p class="card-subtitle">
+                Use this slider to approximate the current KP index. Live data
+                will be wired in later.
+              </p>
+
+              <div class="kp-control">
+                <label class="field-label" for="kp-input">KP index</label>
+                <input
+                  id="kp-input"
+                  type="range"
+                  min="0"
+                  max="9"
+                  step="0.1"
+                  value="3.5"
+                />
+                <div id="kp-value" class="kp-value">KP 3.5</div>
+              </div>
+
+              <p class="field-hint">
+                Rough guide: KP 2–3 = typical background, 4–5 = active,
+                6+ = storm level.
+              </p>
             </div>
-            <div class="verdict-score" id="verdict-score">
-              Score — / 100
+
+            <div class="lp-column">
+              <h2 class="card-title">Sky brightness (light pollution)</h2>
+              <p class="card-subtitle">
+                We estimate light pollution from your coordinates and, where
+                available, a precomputed light-pollution grid. You can override
+                it if you know your local sky.
+              </p>
+
+              <div
+                class="lp-badge-wrapper"
+                data-role="light-pollution-badge"
+              >
+                <div class="lp-badge-text">
+                  <span class="lp-badge-label-strong">Light pollution:</span>
+                  <span class="lp-badge-label">estimating…</span>
+                </div>
+                <div class="lp-indicator">
+                  <div class="lp-indicator-inner"></div>
+                </div>
+              </div>
+
+              <div id="lp-mode-options" class="lp-mode-options">
+                <button
+                  type="button"
+                  class="lp-mode-btn lp-mode-btn-active"
+                  data-mode="auto"
+                >
+                  Auto
+                </button>
+                <button
+                  type="button"
+                  class="lp-mode-btn"
+                  data-mode="dark"
+                >
+                  Dark rural
+                </button>
+                <button
+                  type="button"
+                  class="lp-mode-btn"
+                  data-mode="suburban"
+                >
+                  Suburban
+                </button>
+                <button
+                  type="button"
+                  class="lp-mode-btn"
+                  data-mode="urban"
+                >
+                  Urban / city
+                </button>
+              </div>
+
+              <p id="lp-mode-hint" class="field-hint">
+                Auto is a rough guess from your location and, where available, a
+                precomputed light-pollution grid. Adjust if you know your local
+                sky.
+              </p>
             </div>
           </div>
-          <ul class="debug-list" data-role="aurora-debug">
-            <li>We’ll start as soon as we have a location and a KP value.</li>
-          </ul>
-        </div>
-      </section>
-    </section>
+        </section>
 
-    <!-- TONIGHT SUMMARY -->
-    <section class="card">
-      <div class="tonight-title" id="tonight-title">Tonight at your location</div>
-      <div class="tonight-location" id="tonight-location-sub">Summary based on today’s conditions.</div>
+        <!-- MAIN SCORE & TONIGHT SUMMARY -->
+        <section class="layout-two-column">
+          <!-- MAIN VERDICT CARD -->
+          <article
+            class="card card-verdict"
+            data-role="aurora-verdict"
+          >
+            <div class="card-header">
+              <h2 class="card-title">Aurora visibility from here</h2>
+              <p class="card-subtitle">
+                Takes into account KP, your distance from the auroral oval,
+                sky brightness, a simple clouds and Moon model, and local
+                darkness.
+              </p>
+            </div>
 
-      <div class="tonight-chance chance-low" id="tonight-chance">
-        Low chance
-      </div>
-      <div class="tonight-direction" id="tonight-direction">
-        Look North or North–Northwest.
-      </div>
-      <div class="tonight-geomag" id="tonight-geomag">
-        Geomagnetic activity looks low; cloud and moonlight estimates are still placeholders.
-      </div>
+            <div class="card-body">
+              <p id="verdict-text" class="verdict-text">
+                Calculating your chances…
+              </p>
+              <p id="verdict-score" class="verdict-score">
+                Score — / 100
+              </p>
 
-      <div class="chip-row">
-        <div class="chip">
-          <span class="chip-label">Aurora activity: </span>
-          <span class="chip-value" id="chip-aurora">Low</span>
-        </div>
-        <div class="chip">
-          <span class="chip-label">Clouds: </span>
-          <span class="chip-value" id="chip-clouds">Mostly clear (placeholder 20%).</span>
-        </div>
-        <div class="chip">
-          <span class="chip-label">Moon: </span>
-          <span class="chip-value" id="chip-moon">Moon phase shown per hour; altitude integration coming soon.</span>
-        </div>
-        <div class="chip">
-          <span class="chip-label">Darkness: </span>
-          <span class="chip-value" id="chip-darkness">Sunset / sunrise times placeholder.</span>
-        </div>
-        <div class="chip">
-          <span class="chip-label">Light pollution: </span>
-          <span class="chip-value" id="chip-lightpollution">Included via a grid-based model where available, with manual override.</span>
-        </div>
-      </div>
-    </section>
+              <ul
+                data-role="aurora-debug"
+                class="debug-list"
+              ></ul>
+            </div>
+          </article>
 
-    <!-- NEXT DARK HOURS -->
-    <section class="card">
-      <div class="card-header">
-        <div>
-          <div class="card-title">Next dark hours</div>
-          <div class="card-subtitle" id="next-dark-subtitle">
-            Prototype bar chart – viewing chance, cloud cover and moon phase will plug in here.
+          <!-- TONIGHT PANEL -->
+          <article class="card card-tonight">
+            <div class="card-header">
+              <h2 id="tonight-title" class="card-title">
+                Tonight at your location
+              </h2>
+              <p
+                id="tonight-location-sub"
+                class="card-subtitle"
+              >
+                Tonight’s view based on current KP and a simple sky model.
+              </p>
+            </div>
+
+            <div class="card-body tonight-body">
+              <div class="tonight-main">
+                <div
+                  id="tonight-chance"
+                  class="tonight-chance chance-low"
+                >
+                  Low chance
+                </div>
+                <p
+                  id="tonight-geomag"
+                  class="tonight-geomag"
+                >
+                  Geomagnetic activity is based on the KP slider and your
+                  latitude; clouds and Moon are included using simple v1
+                  models.
+                </p>
+
+                <div class="chip-row">
+                  <span class="chip" id="chip-aurora">
+                    Aurora activity
+                  </span>
+                  <span class="chip" id="chip-darkness">
+                    Darkness window
+                  </span>
+                  <span class="chip" id="chip-clouds">
+                    Clouds
+                  </span>
+                  <span class="chip" id="chip-moon">
+                    Moon
+                  </span>
+                </div>
+              </div>
+
+              <div class="tonight-details">
+                <div class="tonight-detail-block">
+                  <h3 class="detail-title">Darkness</h3>
+                  <p
+                    id="detail-darkness"
+                    class="detail-text"
+                  >
+                    We’ll estimate your dark window once we know your
+                    location.
+                  </p>
+                </div>
+
+                <div class="tonight-detail-block">
+                  <h3 class="detail-title">Clouds</h3>
+                  <p
+                    id="detail-clouds"
+                    class="detail-text"
+                  >
+                    Right now we use a simple fixed cloud cover value that feeds
+                    into the score. In a full version this will come from a
+                    weather API and vary by hour.
+                  </p>
+                </div>
+
+                <div class="tonight-detail-block">
+                  <h3 class="detail-title">Moon</h3>
+                  <p
+                    id="detail-moon"
+                    class="detail-text"
+                  >
+                    We use an approximate Moon phase model to estimate how much
+                    the Moon brightens the sky. In this v1 it reduces the score
+                    slightly when the Moon is bright, especially during dark
+                    hours.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </article>
+        </section>
+
+        <!-- NEXT DARK HOURS -->
+        <section class="card card-next-dark">
+          <div class="card-header">
+            <h2 class="card-title">Next dark hours</h2>
+            <p
+              id="next-dark-subtitle"
+              class="card-subtitle"
+            >
+              Estimated viewing score over key dark hours, combining KP,
+              location, light pollution, simple clouds and Moon phase.
+            </p>
           </div>
-        </div>
-      </div>
 
-      <div class="hourly-bar" id="hourly-bar">
-        <!-- Will be populated dynamically -->
-      </div>
-    </section>
+          <div class="card-body">
+            <div id="hourly-bar" class="hourly-bar">
+              <!-- JS will populate hour blocks here -->
+            </div>
+          </div>
+        </section>
 
-    <!-- DETAIL CARDS -->
-    <section class="detail-grid">
-      <div class="card">
-        <div class="detail-heading">Aurora activity</div>
-        <div class="detail-body" id="detail-aurora">
-          KP and geomagnetic latitude combine into an overall activity level. This is currently driven by your chosen KP slider value.
-        </div>
-      </div>
-      <div class="card">
-        <div class="detail-heading">Clouds</div>
-        <div class="detail-body" id="detail-clouds">
-          Cloud cover will eventually be pulled from a weather API. For now we assume “mostly clear (20%)” as a placeholder for testing layouts.
-        </div>
-      </div>
-      <div class="card">
-        <div class="detail-heading">Moon</div>
-        <div class="detail-body" id="detail-moon">
-          Moon phase and altitude will affect how washed-out the sky is. The hourly strip above is a rough mock; detailed modelling to follow.
-        </div>
-      </div>
-      <div class="card">
-        <div class="detail-heading">Darkness</div>
-        <div class="detail-body" id="detail-darkness">
-          Civil, nautical and astronomical twilight, plus sunset/sunrise, will be used to define the “dark window”. At the moment this panel is descriptive only.
-        </div>
-      </div>
-      <div class="card">
-        <div class="detail-heading">Light pollution</div>
-        <div class="detail-body" id="detail-lightpollution">
-          We estimate light pollution from your latitude/longitude and, when available, a precomputed light-pollution grid. You can override this using the sky brightness control above.
-        </div>
-      </div>
-    </section>
+        <!-- DATA STATUS / EXPLANATORY PANELS -->
+        <section class="card card-status">
+          <div class="card-header">
+            <h2 class="card-title">Data status</h2>
+            <p class="card-subtitle">
+              What’s currently wired in, and what’s still a placeholder.
+            </p>
+          </div>
+          <div class="card-body">
+            <ul class="status-list">
+              <li>
+                <strong>Light pollution</strong> is included using a simple
+                model or, when available, a grid derived from the World Atlas of
+                Artificial Night Sky Brightness, plus an optional manual
+                override.
+              </li>
+              <li>
+                <strong>Darkness</strong> is estimated from a simple solar model
+                (sunrise, sunset and astronomical night) and feeds into both the
+                main score and the “Next dark hours” view.
+              </li>
+              <li>
+                <strong>Clouds and Moon</strong> currently use built-in
+                placeholder models (fixed 20% cloud cover and approximate Moon
+                phase/brightness) that already influence the score; live
+                weather/ephemeris APIs will come later.
+              </li>
+              <li>
+                Your approximate <strong>location</strong> may be estimated from
+                your internet connection if device GPS is not available; as a
+                last resort we fall back to the Isle of Rùm.
+              </li>
+            </ul>
+          </div>
+        </section>
 
-    <!-- TIP -->
-    <section class="card">
-      <div class="tip">
-        <strong>Tip:</strong> Give your eyes 20–30 minutes to adjust to the dark and avoid bright white
-        screens while watching for aurora.
-      </div>
-    </section>
+        <section class="info-grid">
+          <article class="card info-card">
+            <div class="card-header">
+              <h2 class="card-title">Aurora activity</h2>
+            </div>
+            <div class="card-body">
+              <p>
+                KP is a global index of geomagnetic activity. Higher KP means
+                the auroral oval expands further from the poles. In this
+                prototype you control KP with the slider, which drives both the
+                main score and the hourly strip.
+              </p>
+            </div>
+          </article>
 
-    <div class="footer">
-      <span id="footer-time"></span>
-      <span>Light pollution is currently estimated with a simple or grid-based model, with a manual sky brightness override. You can plug in a higher resolution data source later.</span>
+          <article class="card info-card">
+            <div class="card-header">
+              <h2 class="card-title">Clouds</h2>
+            </div>
+            <div class="card-body">
+              <p>
+                Cloud cover will eventually be pulled from a weather API. For
+                now we assume “mostly clear (20%)” and feed that into both the
+                main score and the hourly chart.
+              </p>
+            </div>
+          </article>
+
+          <article class="card info-card">
+            <div class="card-header">
+              <h2 class="card-title">Moon</h2>
+            </div>
+            <div class="card-body">
+              <p>
+                We approximate Moon phase and brightness and use this to
+                slightly reduce the score when the Moon is bright during dark
+                hours. In a future version we’ll also account for Moon altitude
+                and more detailed sky brightness.
+              </p>
+            </div>
+          </article>
+
+          <article class="card info-card">
+            <div class="card-header">
+              <h2 class="card-title">Darkness</h2>
+            </div>
+            <div class="card-body">
+              <p>
+                We use a simple solar model (civil, nautical and astronomical
+                twilight plus sunset/sunrise) to define when the sky is dark
+                enough. This feeds into both the main score and the “Next dark
+                hours” bar chart.
+              </p>
+            </div>
+          </article>
+
+          <article class="card info-card">
+            <div class="card-header">
+              <h2 class="card-title">Light pollution</h2>
+            </div>
+            <div class="card-body">
+              <p>
+                We estimate light pollution from your latitude/longitude and,
+                when available, a precomputed light-pollution grid. You can
+                override this using the sky brightness control above; all of
+                this feeds into the visibility score.
+              </p>
+            </div>
+          </article>
+        </section>
+      </main>
+
+      <footer class="app-footer">
+        <p class="footer-credit">
+          Prototype aurora helper – scores are approximate and for personal
+          interest only.
+        </p>
+      </footer>
     </div>
-  </div>
 
-  <script src="app.js" defer></script>
-</body>
+    <script src="app.js"></script>
+  </body>
 </html>
