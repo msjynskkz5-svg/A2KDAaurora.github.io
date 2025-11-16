@@ -1412,4 +1412,163 @@
           const lon = parseFloat(r.lon);
 
           state.lat = lat;
-          state.l
+          state.lon = lon;
+
+          const name = r.display_name.split(",")[0];
+          const coordsText = `${lat.toFixed(3)}°, ${lon.toFixed(3)}°`;
+
+          setLocationDisplay({
+            labelMain: name,
+            labelDetail: "Location chosen via search.",
+            sourceLabel: "Manual search",
+            sourceKind: "search",
+            coordsText,
+            shortLabel: name
+          });
+
+          // Derive a simple place context from the Nominatim result
+          const category = r.category || r.class || "";
+          const type = r.type || "";
+          const importance = typeof r.importance === "number"
+            ? r.importance
+            : parseFloat(r.importance || "0");
+
+          let placeContext = null;
+
+          if (category === "place" && (type === "city" || type === "town")) {
+            if (importance && importance > 0.7) {
+              placeContext = "large-settlement";
+            } else {
+              placeContext = "settlement";
+            }
+          } else if (
+            category === "place" &&
+            (type === "village" || type === "hamlet" || type === "suburb")
+          ) {
+            placeContext = "settlement";
+          } else if (
+            category === "natural" ||
+            category === "leisure" ||
+            category === "boundary"
+          ) {
+            if (
+              type === "desert" ||
+              type === "nature_reserve" ||
+              type === "national_park" ||
+              type === "forest" ||
+              type === "heath" ||
+              type === "moor" ||
+              type === "peak" ||
+              type === "mountain"
+            ) {
+              placeContext = "dark-nature";
+            }
+          }
+
+          updateLightPollution(lat, lon, { placeContext });
+        })
+        .catch((err) => {
+          console.error("Search failed", err);
+          alert("Search failed – please try again or use GPS / IP.");
+        })
+        .finally(() => {
+          searchButtonEl.disabled = false;
+        });
+    }
+
+    function handleLpModeClick(e) {
+      const btn = e.target.closest(".lp-mode-btn");
+      if (!btn) return;
+
+      const mode = btn.getAttribute("data-mode");
+      if (!mode || !["auto", "dark", "suburban", "urban"].includes(mode)) return;
+
+      state.lpMode = mode;
+
+      // Update button active styles
+      const buttons = lpModeOptionsEl.querySelectorAll(".lp-mode-btn");
+      buttons.forEach((b) => {
+        if (b === btn) {
+          b.classList.add("lp-mode-btn-active");
+        } else {
+          b.classList.remove("lp-mode-btn-active");
+        }
+      });
+
+      let norm;
+      if (mode === "auto") {
+        norm = state.autoLightPollution;
+        state.lightPollution = norm;
+        lpModeHintEl.textContent =
+          "Auto is a rough guess from your location or a grid-based model. Adjust if you know your local sky.";
+      } else if (mode === "dark") {
+        norm = 0.2;
+        state.lightPollution = norm;
+        lpModeHintEl.textContent =
+          "Using your chosen sky brightness: dark rural skies.";
+      } else if (mode === "suburban") {
+        norm = 0.5;
+        state.lightPollution = norm;
+        lpModeHintEl.textContent =
+          "Using your chosen sky brightness: typical suburban or small-town skies.";
+      } else if (mode === "urban") {
+        norm = 0.85;
+        state.lightPollution = norm;
+        lpModeHintEl.textContent =
+          "Using your chosen sky brightness: bright city or town-centre skies.";
+      }
+
+      if (typeof norm === "number") {
+        const manualResult = {
+          normalized: norm,
+          classification: LightPollution.classifyLightPollutionValue(norm)
+        };
+        renderLightPollutionBadge(manualResult);
+      }
+
+      recomputeAurora();
+    }
+
+    function init() {
+      updateFooterTime();
+      updateCloudsUI();
+
+      kpInputEl.addEventListener("input", onKpChange);
+
+      gpsButtonEl.addEventListener("click", () => {
+        initLocationViaGps();
+      });
+
+      searchButtonEl.addEventListener("click", () => {
+        const q = searchInputEl.value.trim();
+        if (!q) return;
+        geocodeSearch(q);
+      });
+
+      searchInputEl.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          const q = searchInputEl.value.trim();
+          if (!q) return;
+          geocodeSearch(q);
+        }
+      });
+
+      if (lpModeOptionsEl) {
+        lpModeOptionsEl.addEventListener("click", handleLpModeClick);
+      }
+
+      // Default flow is GPS → IP → Isle of Rùm
+      initLocationViaGps();
+      onKpChange();
+    }
+
+    init();
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initApp);
+  } else {
+    initApp();
+  }
+})();
