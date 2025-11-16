@@ -2,6 +2,7 @@
 // - LightPollution module
 // - AuroraBrain scoring
 // - Simple solar darkness model
+// - Darkness-aware score adjustment
 // - App wiring (location, KP slider, panels, sky brightness override, hourly chart)
 
 (function () {
@@ -168,7 +169,7 @@
     };
   })();
 
-  // -------- Aurora brain module --------
+  // -------- Aurora brain module (pre-darkness) --------
   const AuroraBrain = (function () {
     function kpScore(kp) {
       const k = Math.min(9, Math.max(0, Number(kp) || 0));
@@ -192,16 +193,17 @@
       return effectivePenalty;
     }
 
+    // Dialled-back time-of-night tweak: small bonus around local midnight only.
     function timeOfNightAdjustment(timeLocalHour) {
       if (typeof timeLocalHour !== "number") return 0;
       const h = ((timeLocalHour % 24) + 24) % 24;
 
-      if (h >= 22 || h < 2) return +5;
-      if ((h >= 3 && h <= 4) || (h >= 20 && h <= 21)) return +2;
-      if (h >= 9 && h <= 17) return -10;
-      return 0;
+      if (h >= 22 || h < 2) return +3; // around local midnight
+      if ((h >= 3 && h <= 4) || (h >= 20 && h <= 21)) return +1; // shoulders
+      return 0; // no explicit daytime penalty here – handled by darkness model
     }
 
+    // Computes a "base" score ignoring detailed darkness.
     function computeBrain(inputs) {
       const {
         kp,
@@ -269,25 +271,14 @@
       }
 
       score = Math.max(0, Math.min(100, score));
-
-      let verdict;
-      if (score >= 65) {
-        verdict = "yes";
-      } else if (score >= 35) {
-        verdict = "maybe";
-      } else {
-        verdict = "no";
-      }
-
       debug.push(
-        `Final visibility score is ${score.toFixed(
+        `Base visibility score before darkness adjustment: ${score.toFixed(
           0
-        )} / 100 → verdict: ${verdict.toUpperCase()}.`
+        )} / 100.`
       );
 
       return {
         score,
-        verdict,
         debug,
         kpScore: sKp,
         locationScore: sLoc,
@@ -456,6 +447,90 @@
       alwaysAstronomicalDark,
       isDaylightNow,
       isDarkNow
+    };
+  }
+
+  // Darkness → scale factor + explanation, based on the *current* time context in the object.
+  function computeDarknessFactorAndNote(darkness) {
+    if (!darkness) {
+      return {
+        factor: 1,
+        note:
+          "Darkness model unavailable – leaving the score unchanged for day/night."
+      };
+    }
+
+    const {
+      alwaysAstronomicalDark,
+      alwaysNight,
+      neverDark,
+      hasAstronomicalNight,
+      hasDay,
+      isDaylightNow,
+      isDarkNow
+    } = darkness;
+
+    // Fully dark all the time (polar night / always-under-18°)
+    if (alwaysAstronomicalDark || (alwaysNight && !neverDark)) {
+      return {
+        factor: 1,
+        note:
+          "No darkness penalty – the sky is effectively dark throughout this date at your latitude."
+      };
+    }
+
+    // Never fully dark (midnight sun regime)
+    if (neverDark) {
+      return {
+        factor: 0.5,
+        note:
+          "Score scaled to 50% because the sky never reaches full astronomical darkness at this time of year."
+      };
+    }
+
+    // Normal case with a proper dark window
+    if (hasAstronomicalNight) {
+      if (isDarkNow) {
+        return {
+          factor: 1,
+          note:
+            "No darkness penalty – you are within the main dark window for your location."
+        };
+      }
+      if (isDaylightNow) {
+        return {
+          factor: 0.25,
+          note:
+            "Score scaled to 25% because it is currently daylight outside the main dark window."
+        };
+      }
+      // Twilight: not fully dark, not fully day
+      return {
+        factor: 0.6,
+        note:
+          "Score scaled to 60% because you are in twilight just outside the main dark window."
+      };
+    }
+
+    // Fallback: we only know coarse day/night, no astronomical night
+    if (hasDay) {
+      if (isDaylightNow) {
+        return {
+          factor: 0.3,
+          note: "Score scaled to 30% because it is currently daylight."
+        };
+      }
+      return {
+        factor: 0.6,
+        note:
+          "Score scaled to 60% based on partial darkness, without a clear astronomical-night window."
+      };
+    }
+
+    return {
+      factor: 1,
+      note:
+        "Darkness model did not give clear day/night flags – leaving the score unchanged."
     };
   }
 
@@ -708,7 +783,7 @@
 
       verdictContainer.dataset.state = verdict;
 
-      // Base text from score/verdict
+      // Base text from final score/verdict
       if (verdict === "yes") {
         verdictTextEl.textContent =
           "Conditions look good – you have a solid chance of seeing aurora from here. 🌌";
@@ -720,7 +795,7 @@
           "It’s unlikely right now. You’d need much stronger activity or darker skies.";
       }
 
-      // Daylight override, now using solar model where possible
+      // Daylight override, using solar model where possible
       if (isDaytime) {
         let msg =
           "It’s currently daylight at your location, so you won’t see the aurora until after dark.";
@@ -740,7 +815,7 @@
 
       if (debugListEl) {
         debugListEl.innerHTML = "";
-        debug.forEach((line) => {
+        (debug || []).forEach((line) => {
           const li = document.createElement("li");
           li.textContent = line;
           debugListEl.appendChild(li);
@@ -864,36 +939,40 @@
           timeLocalHour: localHour
         };
 
-        let brain = AuroraBrain.computeBrain(inputs);
-        let score = brain.score;
+        const baseResult = AuroraBrain.computeBrain(inputs);
+        let score = baseResult.score;
 
-        // Apply a simple darkness weighting on top of the brain score
-        if (
-          darkness.hasAstronomicalNight &&
-          darkness.astroDusk != null &&
-          darkness.astroDawn != null
-        ) {
-          const inDark = isHourBetween(
-            localHour,
-            darkness.astroDusk,
-            darkness.astroDawn
-          );
-          if (!inDark) {
-            score *= 0.3;
-          }
-        } else if (darkness.neverDark) {
-          score *= 0.5;
-        }
-
-        const scoreRounded = Math.round(score);
-        const barHeight = Math.max(8, Math.min(100, scoreRounded));
-
+        // Build a darkness context for this specific hour
         let isDayHour = false;
         if (darkness.hasDay && darkness.sunrise != null && darkness.sunset != null) {
           isDayHour = isHourBetween(localHour, darkness.sunrise, darkness.sunset);
         } else if (darkness.alwaysDaylight) {
           isDayHour = true;
         }
+
+        let isDarkHour = false;
+        if (darkness.alwaysAstronomicalDark) {
+          isDarkHour = true;
+        } else if (
+          darkness.hasAstronomicalNight &&
+          darkness.astroDusk != null &&
+          darkness.astroDawn != null
+        ) {
+          isDarkHour = isHourBetween(localHour, darkness.astroDusk, darkness.astroDawn);
+        }
+
+        const darknessForHour = {
+          ...darkness,
+          isDaylightNow: isDayHour,
+          isDarkNow: isDarkHour
+        };
+
+        const df = computeDarknessFactorAndNote(darknessForHour);
+        const factor = df.factor;
+        score = Math.max(0, Math.min(100, score * factor));
+
+        const scoreRounded = Math.round(score);
+        const barHeight = Math.max(8, Math.min(100, scoreRounded));
 
         const skyIcon = isDayHour ? "☀︎" : "🌙";
         const metaText = `${scoreRounded}% · ☁︎ · ${skyIcon}`;
@@ -953,12 +1032,68 @@
         cloudCover: state.cloudCover
       };
 
+      // Hourly chart uses the same "base brain + darkness factor per hour"
       renderHourlyChart(darkness, baseInputs);
 
-      const result = AuroraBrain.computeBrain({
+      // Main brain: compute base score, then apply darkness factor for *now*
+      const baseResult = AuroraBrain.computeBrain({
         ...baseInputs,
         timeLocalHour: localHour
       });
+
+      let darknessFactor = 1;
+      let darknessNote = null;
+      if (darkness) {
+        const df = computeDarknessFactorAndNote(darkness);
+        darknessFactor = df.factor;
+        darknessNote = df.note;
+      }
+
+      let adjustedScore = baseResult.score * darknessFactor;
+      adjustedScore = Math.max(0, Math.min(100, adjustedScore));
+
+      const debug = baseResult.debug ? baseResult.debug.slice() : [];
+      if (darknessNote) {
+        debug.push(darknessNote);
+      } else {
+        debug.push(
+          `Darkness model did not apply a penalty (factor ${darknessFactor.toFixed(
+            2
+          )}).`
+        );
+      }
+      if (darknessFactor !== 1) {
+        debug.push(
+          `Score after darkness adjustment: ${adjustedScore.toFixed(0)} / 100.`
+        );
+      } else {
+        debug.push(
+          `Score unchanged by darkness (factor 1.00): ${adjustedScore.toFixed(
+            0
+          )} / 100.`
+        );
+      }
+
+      // Final verdict thresholds on the darkness-adjusted score
+      let verdict;
+      if (adjustedScore >= 65) {
+        verdict = "yes";
+      } else if (adjustedScore >= 35) {
+        verdict = "maybe";
+      } else {
+        verdict = "no";
+      }
+      debug.push(
+        `Final visibility verdict after darkness adjustment: ${verdict.toUpperCase()}.`
+      );
+
+      const result = {
+        ...baseResult,
+        score: adjustedScore,
+        verdict,
+        darknessFactor,
+        debug
+      };
 
       renderAuroraVerdict(result, { localHour, darkness });
     }
