@@ -1572,3 +1572,16 @@
     initApp();
   }
 })();
+/**
+ * Register service worker for PWA installability and offline support.
+ * This runs after the main Aurora Now app has initialised.
+ */
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker
+      .register("service-worker.js")
+      .catch((err) => {
+        console.warn("Service worker registration failed:", err);
+      });
+  });
+}
