@@ -1,8 +1,4 @@
-// Simple service worker for Aurora Now PWA.
-// Provides offline caching of the core app shell and a basic
-// network-first strategy with offline fallback for navigation.
-
-const CACHE_NAME = "aurora-now-v1";
+const CACHE_NAME = "aurora-now-v2";
 
 const ASSETS = [
   "./",
@@ -18,6 +14,7 @@ self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
   );
+  self.skipWaiting();
 });
 
 self.addEventListener("activate", (event) => {
@@ -30,28 +27,30 @@ self.addEventListener("activate", (event) => {
       )
     )
   );
+  self.clients.claim();
 });
 
 self.addEventListener("fetch", (event) => {
   const { request } = event;
 
-  // Only handle GET requests
   if (request.method !== "GET") {
     return;
   }
 
   event.respondWith(
-    caches.match(request).then((cachedResponse) => {
-      if (cachedResponse) {
-        return cachedResponse;
-      }
-
-      return fetch(request).catch(() => {
-        // For navigation requests, fall back to the cached shell
-        if (request.mode === "navigate") {
-          return caches.match("./");
-        }
-      });
-    })
+    fetch(request)
+      .then((response) => {
+        const copy = response.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+        return response;
+      })
+      .catch(() =>
+        caches.match(request).then((cached) => {
+          if (cached) return cached;
+          if (request.mode === "navigate") {
+            return caches.match("./index.html");
+          }
+        })
+      )
   );
 });
