@@ -35,6 +35,12 @@
         --aurora-badge-bg: rgba(10, 167, 122, 0.3);
       }
 
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+
       html,
       body {
         background: radial-gradient(
@@ -45,9 +51,13 @@
         );
         color: var(--aurora-text-main);
         color-scheme: dark;
+        margin: 0;
+        padding: 0;
+        overflow-x: hidden; /* prevent tiny horizontal scroll on mobile */
       }
 
       .app-shell {
+        width: 100%;
         max-width: 1100px;
         margin: 0 auto;
         padding: 24px 16px 32px;
