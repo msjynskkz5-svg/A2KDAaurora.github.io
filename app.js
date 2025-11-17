@@ -1238,11 +1238,116 @@
     }
 
     function onKpChange() {
-      const val = parseFloat(kpInputEl.value) || 0;
-      state.kp = val;
-      kpValueEl.textContent = `KP ${val.toFixed(1)}`;
-      recomputeAurora();
+  const val = parseFloat(kpInputEl.value) || 0;
+  state.kp = val;
+  kpValueEl.textContent = `KP ${val.toFixed(1)}`;
+  recomputeAurora();
+}
+
+function applyKpToUi(kpValue) {
+  if (!kpInputEl) return;
+
+  const min = kpInputEl.min !== undefined ? parseFloat(kpInputEl.min) : 0;
+  const max = kpInputEl.max !== undefined ? parseFloat(kpInputEl.max) : 9;
+  const clamped = Math.min(max, Math.max(min, kpValue));
+
+  kpInputEl.value = clamped.toFixed(1);
+  onKpChange();
+}
+
+async function fetchLatestKpFromNoaa() {
+  const url = "https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json";
+  const response = await fetch(url, { cache: "no-cache" });
+
+  if (!response.ok) {
+    throw new Error("NOAA KP fetch failed with status " + response.status);
+  }
+
+  const data = await response.json();
+
+  // Expect an array, first row is header
+  if (!Array.isArray(data) || data.length < 2) {
+    throw new Error("Unexpected NOAA KP data shape");
+  }
+
+  const lastRow = data[data.length - 1];
+
+  const timeTag = lastRow[0];       // "YYYY-MM-DD HH:mm:ss.sss"
+  const kpFractionStr = lastRow[2]; // Kp_fraction, e.g. "2.33"
+  const kpStr = lastRow[1];         // Kp integer, e.g. "2"
+
+  let kp = Number.parseFloat(kpFractionStr);
+  if (!Number.isFinite(kp)) {
+    kp = Number.parseFloat(kpStr);
+  }
+  if (!Number.isFinite(kp)) {
+    throw new Error("NOAA KP values not parseable");
+  }
+
+  return { kp, timeTag };
+}
+
+function initKpLiveMode() {
+  const toggleEl = document.getElementById("kp-live-toggle");
+  const statusEl = document.getElementById("kp-live-status");
+
+  // If the HTML isn't present (older layout), just do nothing
+  if (!toggleEl || !statusEl) {
+    return;
+  }
+
+  let intervalId = null;
+
+  async function updateFromLiveKp() {
+    try {
+      statusEl.textContent = "Fetching latest NOAA KP…";
+
+      const { kp, timeTag } = await fetchLatestKpFromNoaa();
+
+      applyKpToUi(kp);
+
+      let displayTime = timeTag;
+      try {
+        // Convert "YYYY-MM-DD HH:mm:ss.sss" → "YYYY-MM-DDTHH:mm:ss.sssZ"
+        const iso = timeTag.replace(" ", "T") + "Z";
+        const d = new Date(iso);
+        if (!Number.isNaN(d.getTime())) {
+          displayTime = d.toUTCString();
+        }
+      } catch (_) {
+        // leave displayTime as original
+      }
+
+      statusEl.textContent = `Live KP ≈ ${kp.toFixed(1)} (NOAA, ${displayTime})`;
+    } catch (err) {
+      console.warn("Failed to update live KP:", err);
+      statusEl.textContent = "Live KP unavailable – using manual value.";
+      toggleEl.checked = false;
+      if (intervalId !== null) {
+        clearInterval(intervalId);
+        intervalId = null;
+      }
     }
+  }
+
+  toggleEl.addEventListener("change", () => {
+    if (toggleEl.checked) {
+      // Turn ON: fetch now and then every hour
+      updateFromLiveKp();
+      intervalId = window.setInterval(updateFromLiveKp, 60 * 60 * 1000);
+    } else {
+      // Turn OFF: stop auto-updates
+      if (intervalId !== null) {
+        clearInterval(intervalId);
+        intervalId = null;
+      }
+      statusEl.textContent = "Live KP off – using manual value.";
+    }
+  });
+
+  // Initial label
+  statusEl.textContent = "Live KP off – using manual value.";
+}
 
     async function updateLightPollution(lat, lon, options) {
       try {
@@ -1529,16 +1634,17 @@
       recomputeAurora();
     }
 
-    function init() {
-      updateFooterTime();
-      updateCloudsUI();
+function init() {
+  updateFooterTime();
+  updateCloudsUI();
+  initKpLiveMode();
 
-      kpInputEl.addEventListener("input", onKpChange);
+  kpInputEl.addEventListener("input", onKpChange);
 
-      gpsButtonEl.addEventListener("click", () => {
-        initLocationViaGps();
-      });
-
+  gpsButtonEl.addEventListener("click", () => {
+    initLocationViaGps();
+  });
+  
       searchButtonEl.addEventListener("click", () => {
         const q = searchInputEl.value.trim();
         if (!q) return;
