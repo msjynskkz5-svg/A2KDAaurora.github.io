@@ -1634,17 +1634,17 @@
 
       recomputeAurora();
     }
+    
+    function init() {
+      updateFooterTime();
+      updateCloudsUI();
+      initKpLiveMode(); // <-- add this line
 
-function init() {
-  updateFooterTime();
-  updateCloudsUI();
-  initKpLiveMode();
+      kpInputEl.addEventListener("input", onKpChange);
 
-  kpInputEl.addEventListener("input", onKpChange);
-
-  gpsButtonEl.addEventListener("click", () => {
-    initLocationViaGps();
-  });
+      gpsButtonEl.addEventListener("click", () => {
+        initLocationViaGps();
+      });
   
       searchButtonEl.addEventListener("click", () => {
         const q = searchInputEl.value.trim();
