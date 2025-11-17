@@ -237,31 +237,42 @@
         <!-- KP & LIGHT POLLUTION -->
         <section class="card card-kp-lp">
           <div class="card-body kp-lp-grid">
-            <div class="kp-column">
-              <h2 class="card-title">Geomagnetic activity (KP)</h2>
-              <p class="card-subtitle">
-                Use this slider to approximate the current KP index. Live
-                data will be wired in later.
-              </p>
+                <div class="kp-column">
+      <h2 class="card-title">Geomagnetic activity (KP)</h2>
+      <p class="card-subtitle">
+        Use this slider to approximate the current KP index. Live
+        data will be wired in later.
+      </p>
 
-              <div class="kp-control">
-                <label class="field-label" for="kp-input">KP index</label>
-                <input
-                  id="kp-input"
-                  type="range"
-                  min="0"
-                  max="9"
-                  step="0.1"
-                  value="3.5"
-                />
-                <div id="kp-value" class="kp-value">KP 3.5</div>
-              </div>
+      <div class="kp-control">
+        <label class="field-label" for="kp-input">KP index</label>
+        <input
+          id="kp-input"
+          type="range"
+          min="0"
+          max="9"
+          step="0.1"
+          value="3.5"
+        />
+        <div id="kp-value" class="kp-value">KP 3.5</div>
+      </div>
 
-              <p class="field-hint">
-                Rough guide: KP 2–3 = typical background, 4–5 = active,
-                6+ = storm level.
-              </p>
-            </div>
+      <p class="field-hint">
+        Rough guide: KP 2–3 = typical background, 4–5 = active,
+        6+ = storm level.
+      </p>
+
+      <div class="kp-live-row">
+        <label class="kp-live-toggle">
+          <input type="checkbox" id="kp-live-toggle" />
+          Use live NOAA KP (beta)
+        </label>
+        <div id="kp-live-status" class="kp-live-status">
+          Live KP off – using manual value.
+        </div>
+      </div>
+    </div>
+
 
             <div class="lp-column">
               <h2 class="card-title">
