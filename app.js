@@ -682,7 +682,10 @@
       autoLightPollution: 0.5,
       lpMode: "auto", // 'auto' | 'dark' | 'suburban' | 'urban'
       kp: parseFloat(kpInputEl.value) || 3.5,
-      cloudCover: 0.2, // v1: fixed 20% cloud cover used in the score
+      cloudCover: 0.2, // default cloud cover until live weather arrives
+      hourlyCloudCover: [],
+      weatherSource: "pending",
+      weatherUpdatedAt: null,
       locationShort: "your location",
       darkness: null,
       darknessLive: null,
@@ -975,25 +978,135 @@
       updateTonightSummary(result);
     }
 
-    // v1: Clouds UI (fixed cover, but used in score)
+    function clamp01(v) {
+      if (typeof v !== "number" || Number.isNaN(v)) return null;
+      return Math.min(1, Math.max(0, v));
+    }
+
+    // Live clouds UI (driven by weather API when available)
     function updateCloudsUI() {
       if (!chipCloudsEl || !detailCloudsEl) return;
 
-      if (typeof state.cloudCover !== "number") {
-        chipCloudsEl.textContent = "Cloud data not yet plugged in.";
-        detailCloudsEl.textContent =
-          "Cloud cover data is not yet available. In a future version this will be pulled from a weather API per hour.";
-        return;
+      const pct =
+        typeof state.cloudCover === "number"
+          ? Math.round(state.cloudCover * 100)
+          : null;
+      let desc = "Mostly clear";
+      if (pct != null) {
+        if (pct >= 70) desc = "Heavily overcast";
+        else if (pct >= 40) desc = "Partly cloudy";
+      } else {
+        desc = "Cloud data unavailable";
       }
 
-      const pct = Math.round(state.cloudCover * 100);
-      let desc = "Mostly clear";
-      if (pct >= 70) desc = "Heavily overcast";
-      else if (pct >= 40) desc = "Partly cloudy";
+      const pctText = pct != null ? `~${pct}% cloud` : "using fallback";
+      chipCloudsEl.textContent = `${desc} (${pctText}).`;
 
-      chipCloudsEl.textContent = `${desc} (~${pct}% cloud).`;
-      detailCloudsEl.textContent =
-        "Right now we use a simple fixed cloud cover value that feeds into the score. In a full version this will come from a weather API and vary by hour.";
+      if (state.weatherSource === "open-meteo" && state.weatherUpdatedAt) {
+        const updated = state.weatherUpdatedAt.toLocaleTimeString(undefined, {
+          hour: "2-digit",
+          minute: "2-digit"
+        });
+        detailCloudsEl.textContent = `Live cloud cover from Open-Meteo for your coordinates. Last updated ${updated}.`;
+      } else {
+        detailCloudsEl.textContent =
+          "Using a fallback 20% cloud cover until live weather can be fetched for your location.";
+      }
+    }
+
+    function mapCloudCoverForTime(targetDate) {
+      if (!state.hourlyCloudCover || !state.hourlyCloudCover.length) {
+        return null;
+      }
+
+      const targetTs = targetDate.getTime();
+      let best = null;
+
+      state.hourlyCloudCover.forEach((entry) => {
+        if (!entry || !entry.time || typeof entry.cover !== "number") return;
+        const diff = Math.abs(entry.time.getTime() - targetTs);
+        if (!best || diff < best.diff) {
+          best = { cover: entry.cover, diff };
+        }
+      });
+
+      // Only trust reasonably close hourly values (within ~90 minutes)
+      if (best && best.diff <= 90 * 60 * 1000) {
+        return best.cover;
+      }
+
+      return best ? best.cover : null;
+    }
+
+    async function refreshWeather(lat, lon) {
+      try {
+        if (typeof lat !== "number" || typeof lon !== "number") return;
+
+        const url =
+          "https://api.open-meteo.com/v1/forecast?hourly=cloud_cover&current_weather=true&forecast_days=2&timezone=auto&latitude=" +
+          encodeURIComponent(lat) +
+          "&longitude=" +
+          encodeURIComponent(lon);
+
+        const res = await fetch(url, { headers: { Accept: "application/json" } });
+        if (!res.ok) {
+          throw new Error("Weather fetch failed with status " + res.status);
+        }
+
+        const data = await res.json();
+
+        let cloud = null;
+        if (
+          data.current_weather &&
+          typeof data.current_weather.cloudcover === "number"
+        ) {
+          cloud = clamp01(data.current_weather.cloudcover / 100);
+        }
+
+        const hourly = [];
+        if (
+          data.hourly &&
+          Array.isArray(data.hourly.time) &&
+          Array.isArray(data.hourly.cloud_cover)
+        ) {
+          const len = Math.min(
+            data.hourly.time.length,
+            data.hourly.cloud_cover.length
+          );
+          for (let i = 0; i < len; i++) {
+            const t = data.hourly.time[i];
+            const c = data.hourly.cloud_cover[i];
+            if (typeof c !== "number") continue;
+            const parsed = new Date(t);
+            if (Number.isNaN(parsed.getTime())) continue;
+            const cover = clamp01(c / 100);
+            if (cover == null) continue;
+            hourly.push({ time: parsed, cover });
+          }
+        }
+
+        if (cloud == null && hourly.length) {
+          cloud = hourly[0].cover;
+        }
+
+        if (cloud != null) {
+          state.cloudCover = cloud;
+        }
+        state.hourlyCloudCover = hourly;
+        state.weatherSource = "open-meteo";
+        state.weatherUpdatedAt = new Date();
+
+        updateCloudsUI();
+        recomputeAurora();
+      } catch (err) {
+        console.warn("Weather fetch failed – keeping fallback clouds", err);
+        state.weatherSource = "fallback";
+        if (typeof state.cloudCover !== "number") {
+          state.cloudCover = 0.2;
+        }
+        updateCloudsUI();
+        recomputeAurora();
+      }
     }
 
     // v1: Moon UI
@@ -1064,6 +1177,7 @@
       const moon = moonInfo || computeMoonInfo(now);
 
       const hours = [];
+      const hourDates = [];
       if (
         darkness.hasAstronomicalNight &&
         darkness.astroDusk != null &&
@@ -1085,33 +1199,54 @@
           startHour = wrapHour(Math.round(darkness.astroDusk));
         }
 
+        const startDate = new Date(now);
+        startDate.setMinutes(0, 0, 0);
+        startDate.setHours(Math.floor(startHour), 0, 0, 0);
+        if (wrapHour(startHour) < hourNow - 0.01) {
+          startDate.setDate(startDate.getDate() + 1);
+        }
+
         for (let i = 0; i < 8; i++) {
+          const d = new Date(startDate.getTime() + i * 3600000);
           hours.push(wrapHour(startHour + i));
+          hourDates.push(d);
         }
       } else if (darkness.alwaysAstronomicalDark || darkness.alwaysNight) {
         // Always dark: show the next 8 hours from now
         let startHour = Math.floor(hourNow);
+        const startDate = new Date(now);
+        startDate.setMinutes(0, 0, 0);
+        startDate.setHours(startHour, 0, 0, 0);
         for (let i = 0; i < 8; i++) {
+          const d = new Date(startDate.getTime() + i * 3600000);
           hours.push(wrapHour(startHour + i));
+          hourDates.push(d);
         }
       } else {
         // No full darkness: still show the next 8 hours, but label accordingly
         let startHour = Math.floor(hourNow);
+        const startDate = new Date(now);
+        startDate.setMinutes(0, 0, 0);
+        startDate.setHours(startHour, 0, 0, 0);
         for (let i = 0; i < 8; i++) {
+          const d = new Date(startDate.getTime() + i * 3600000);
           hours.push(wrapHour(startHour + i));
+          hourDates.push(d);
         }
       }
 
-      hours.forEach((h) => {
+      hours.forEach((h, idx) => {
         const localHour = h;
         const timeLabel = formatHourLocal(localHour);
+        const hourDate = hourDates[idx] || now;
 
         const inputs = {
           kp: baseInputs.kp,
           distanceToOvalKm: baseInputs.distanceToOvalKm,
           geomagneticLatitude: baseInputs.geomagneticLatitude,
           lightPollution: baseInputs.lightPollution,
-          cloudCover: baseInputs.cloudCover,
+          cloudCover:
+            mapCloudCoverForTime(hourDate) ?? baseInputs.cloudCover,
           timeLocalHour: localHour
         };
 
@@ -1158,8 +1293,8 @@
         const barHeight = Math.max(8, Math.min(100, scoreRounded));
 
         const cloudPct =
-          typeof baseInputs.cloudCover === "number"
-            ? Math.round(baseInputs.cloudCover * 100)
+          typeof inputs.cloudCover === "number"
+            ? Math.round(inputs.cloudCover * 100)
             : null;
 
         let metaText;
@@ -1229,12 +1364,15 @@
       state.geomagneticLatitude = geomagLat;
       state.distanceToOvalKm = distanceKm;
 
+      const cloudCover =
+        typeof state.cloudCover === "number" ? state.cloudCover : 0.2;
+
       const baseInputs = {
         kp: state.kp,
         distanceToOvalKm: distanceKm,
         geomagneticLatitude: geomagLat,
         lightPollution: state.lightPollution,
-        cloudCover: state.cloudCover
+        cloudCover
       };
 
       // Hourly chart uses the same "base brain + moon + darkness factor per hour"
@@ -1580,6 +1718,7 @@
 
       updateLightPollution(lat, lon, { placeContext: "dark-nature" });
       refreshDarknessFromSunriseSunset(lat, lon);
+      refreshWeather(lat, lon);
     }
 
     function useIpLocationFallback() {
@@ -1612,6 +1751,7 @@
           if (state.lat != null && state.lon != null) {
             updateLightPollution(state.lat, state.lon);
             refreshDarknessFromSunriseSunset(state.lat, state.lon);
+            refreshWeather(state.lat, state.lon);
           } else {
             // If we somehow didn't get usable coordinates, fall back to default.
             useDefaultRumLocation();
@@ -1652,6 +1792,7 @@
 
           updateLightPollution(latitude, longitude);
           refreshDarknessFromSunriseSunset(latitude, longitude);
+          refreshWeather(latitude, longitude);
         },
         (err) => {
           console.warn("Geolocation failed, falling back to IP", err);
@@ -1739,6 +1880,7 @@
 
           updateLightPollution(lat, lon, { placeContext });
           refreshDarknessFromSunriseSunset(lat, lon);
+          refreshWeather(lat, lon);
         })
         .catch((err) => {
           console.error("Search failed", err);
