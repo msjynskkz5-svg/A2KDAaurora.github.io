@@ -1238,11 +1238,11 @@
     }
 
     function onKpChange() {
-  const val = parseFloat(kpInputEl.value) || 0;
-  state.kp = val;
-  kpValueEl.textContent = `KP ${val.toFixed(1)}`;
-  recomputeAurora();
-}
+      const val = parseFloat(kpInputEl.value) || 0;
+      state.kp = val;
+      kpValueEl.textContent = `KP ${val.toFixed(1)}`;
+      recomputeAurora();
+    }
 
     function applyKpToUi(kpValue) {
       if (!kpInputEl) return;
@@ -1638,7 +1638,7 @@
     function init() {
       updateFooterTime();
       updateCloudsUI();
-      initKpLiveMode(); // <-- add this line
+      initKpLiveMode();
 
       kpInputEl.addEventListener("input", onKpChange);
 
