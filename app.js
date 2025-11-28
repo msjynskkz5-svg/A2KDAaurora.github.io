@@ -1830,12 +1830,18 @@
         .then((data) => {
           const city = data.city || "your area";
           const country = data.country_name || data.country || "your country";
-          const lat = typeof data.latitude === "number" ? data.latitude : data.lat;
-          const lon =
-            typeof data.longitude === "number" ? data.longitude : data.lon;
+          const latRaw = data.latitude ?? data.lat;
+          const lonRaw = data.longitude ?? data.lon;
 
-          state.lat = typeof lat === "number" ? lat : null;
-          state.lon = typeof lon === "number" ? lon : null;
+          const lat =
+            typeof latRaw === "string" ? parseFloat(latRaw) : latRaw;
+          const lon =
+            typeof lonRaw === "string" ? parseFloat(lonRaw) : lonRaw;
+
+          state.lat =
+            typeof lat === "number" && !Number.isNaN(lat) ? lat : null;
+          state.lon =
+            typeof lon === "number" && !Number.isNaN(lon) ? lon : null;
 
           const coordsText =
             state.lat != null && state.lon != null
@@ -1915,7 +1921,12 @@
         encodeURIComponent(query);
 
       searchButtonEl.disabled = true;
-      fetch(url, { headers: { "Accept-Language": "en" } })
+      fetch(url, {
+        headers: {
+          "Accept-Language": "en",
+          "User-Agent": "Aurora Planner/1.0 (https://a2kdaaurora.github.io)"
+        }
+      })
         .then((res) => res.json())
         .then((results) => {
           if (!results || !results.length) {
