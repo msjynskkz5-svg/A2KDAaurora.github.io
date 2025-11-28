@@ -1155,20 +1155,71 @@
 
       hourlyBarEl.innerHTML = "";
 
-      if (!state.lat || !state.lon || !darkness) {
-        // If we don't have enough info, show a simple placeholder.
-        for (let i = 0; i < 8; i++) {
-          const block = document.createElement("div");
-          block.className = "hour-block";
-          block.innerHTML = `
-            <div class="hour-block-time">--:--</div>
-            <div class="hour-block-bar">
-              <div class="hour-block-bar-inner" style="height: 50%;"></div>
-            </div>
-            <div class="hour-block-meta">Waiting for location…</div>
-          `;
-          hourlyBarEl.appendChild(block);
+      const addPlaceholderRows = (count = 8) => {
+        const timeRow = document.createElement("div");
+        timeRow.className = "hourly-row";
+        timeRow.innerHTML = `<div class=\"hourly-row-label\">Times</div>`;
+        const timeTrack = document.createElement("div");
+        timeTrack.className = "hourly-row-track";
+        for (let i = 0; i < count; i++) {
+          const cell = document.createElement("div");
+          cell.className = "hour-cell hour-cell-time";
+          cell.textContent = "--:--";
+          timeTrack.appendChild(cell);
         }
+        timeRow.appendChild(timeTrack);
+
+        const scoreRow = document.createElement("div");
+        scoreRow.className = "hourly-row";
+        scoreRow.innerHTML = `<div class=\"hourly-row-label\">Viewing score</div>`;
+        const scoreTrack = document.createElement("div");
+        scoreTrack.className = "hourly-row-track";
+        for (let i = 0; i < count; i++) {
+          const cell = document.createElement("div");
+          cell.className = "hour-cell hour-cell-score";
+          cell.innerHTML = `
+            <div class=\"hour-score-bar\"> <div class=\"hour-score-bar-fill\" style=\"height: 50%;\"></div> </div>
+            <div class=\"hour-score-value\">--%</div>
+            <div class=\"hour-cell-note\">Waiting for location…</div>
+          `;
+          scoreTrack.appendChild(cell);
+        }
+        scoreRow.appendChild(scoreTrack);
+
+        const cloudRow = document.createElement("div");
+        cloudRow.className = "hourly-row";
+        cloudRow.innerHTML = `<div class=\"hourly-row-label\">Cloud cover</div>`;
+        const cloudTrack = document.createElement("div");
+        cloudTrack.className = "hourly-row-track";
+        for (let i = 0; i < count; i++) {
+          const cell = document.createElement("div");
+          cell.className = "hour-cell hour-cell-note";
+          cell.textContent = "--";
+          cloudTrack.appendChild(cell);
+        }
+        cloudRow.appendChild(cloudTrack);
+
+        const moonRow = document.createElement("div");
+        moonRow.className = "hourly-row";
+        moonRow.innerHTML = `<div class=\"hourly-row-label\">Moon brightness</div>`;
+        const moonTrack = document.createElement("div");
+        moonTrack.className = "hourly-row-track";
+        for (let i = 0; i < count; i++) {
+          const cell = document.createElement("div");
+          cell.className = "hour-cell hour-cell-note";
+          cell.textContent = "--";
+          moonTrack.appendChild(cell);
+        }
+        moonRow.appendChild(moonTrack);
+
+        hourlyBarEl.appendChild(timeRow);
+        hourlyBarEl.appendChild(scoreRow);
+        hourlyBarEl.appendChild(cloudRow);
+        hourlyBarEl.appendChild(moonRow);
+      };
+
+      if (!state.lat || !state.lon || !darkness) {
+        addPlaceholderRows();
         return;
       }
 
@@ -1176,69 +1227,72 @@
       const hourNow = now.getHours() + now.getMinutes() / 60;
       const moon = moonInfo || computeMoonInfo(now);
 
-      const hours = [];
       const hourDates = [];
+      const buildDateForHour = (hourValue, baseDate) => {
+        const d = new Date(baseDate);
+        d.setHours(0, 0, 0, 0);
+        const hoursWhole = Math.floor(hourValue);
+        const minutes = Math.round((hourValue - hoursWhole) * 60);
+        d.setHours(hoursWhole, minutes, 0, 0);
+        return d;
+      };
+
       if (
         darkness.hasAstronomicalNight &&
         darkness.astroDusk != null &&
         darkness.astroDawn != null
       ) {
-        // If we're already in the dark window, start from the next full hour (from "now").
-        // Otherwise, start from the beginning of the dark window.
-        const inDarkNow = isHourBetween(
-          hourNow,
-          darkness.astroDusk,
-          darkness.astroDawn
-        );
-
-        let startHour;
-        if (inDarkNow) {
-          startHour = wrapHour(Math.ceil(hourNow));
-        } else {
-          // "Next dark hours" – use the beginning of the main dark window.
-          startHour = wrapHour(Math.round(darkness.astroDusk));
+        const duskDate = buildDateForHour(darkness.astroDusk, now);
+        const dawnDate = buildDateForHour(darkness.astroDawn, duskDate);
+        if (dawnDate <= duskDate) {
+          dawnDate.setDate(dawnDate.getDate() + 1);
         }
 
-        const startDate = new Date(now);
-        startDate.setMinutes(0, 0, 0);
-        startDate.setHours(Math.floor(startHour), 0, 0, 0);
-        if (wrapHour(startHour) < hourNow - 0.01) {
-          startDate.setDate(startDate.getDate() + 1);
+        if (now > dawnDate) {
+          duskDate.setDate(duskDate.getDate() + 1);
+          dawnDate.setDate(dawnDate.getDate() + 1);
         }
 
-        for (let i = 0; i < 8; i++) {
-          const d = new Date(startDate.getTime() + i * 3600000);
-          hours.push(wrapHour(startHour + i));
-          hourDates.push(d);
+        const startDate = new Date(duskDate);
+        if (startDate.getMinutes() > 0) {
+          startDate.setHours(startDate.getHours() + 1, 0, 0, 0);
+        }
+
+        let cursor = startDate;
+        let safety = 0;
+        while (cursor <= dawnDate && safety < 48) {
+          hourDates.push(new Date(cursor));
+          cursor = new Date(cursor.getTime() + 3600000);
+          safety++;
         }
       } else if (darkness.alwaysAstronomicalDark || darkness.alwaysNight) {
-        // Always dark: show the next 8 hours from now
         let startHour = Math.floor(hourNow);
         const startDate = new Date(now);
         startDate.setMinutes(0, 0, 0);
         startDate.setHours(startHour, 0, 0, 0);
-        for (let i = 0; i < 8; i++) {
+        for (let i = 0; i < 12; i++) {
           const d = new Date(startDate.getTime() + i * 3600000);
-          hours.push(wrapHour(startHour + i));
           hourDates.push(d);
         }
       } else {
-        // No full darkness: still show the next 8 hours, but label accordingly
         let startHour = Math.floor(hourNow);
         const startDate = new Date(now);
         startDate.setMinutes(0, 0, 0);
         startDate.setHours(startHour, 0, 0, 0);
         for (let i = 0; i < 8; i++) {
           const d = new Date(startDate.getTime() + i * 3600000);
-          hours.push(wrapHour(startHour + i));
           hourDates.push(d);
         }
       }
 
-      hours.forEach((h, idx) => {
-        const localHour = h;
-        const timeLabel = formatHourLocal(localHour);
-        const hourDate = hourDates[idx] || now;
+      if (!hourDates.length) {
+        addPlaceholderRows();
+        return;
+      }
+
+      const hourEntries = hourDates.map((hourDate) => {
+        const localHour =
+          hourDate.getHours() + hourDate.getMinutes() / 60;
 
         const inputs = {
           kp: baseInputs.kp,
@@ -1253,7 +1307,6 @@
         const baseResult = AuroraBrain.computeBrain(inputs);
         let score = baseResult.score;
 
-        // Build a darkness context for this specific hour
         let isDayHour = false;
         if (darkness.hasDay && darkness.sunrise != null && darkness.sunset != null) {
           isDayHour = isHourBetween(localHour, darkness.sunrise, darkness.sunset);
@@ -1278,13 +1331,11 @@
           isDarkNow: isDarkHour
         };
 
-        // Moon penalty for this hour
         const moonPenaltyHour = computeMoonPenalty(moon, darknessForHour);
         if (moonPenaltyHour > 0) {
           score = Math.max(0, Math.min(100, score - moonPenaltyHour));
         }
 
-        // Darkness factor for this hour
         const df = computeDarknessFactorAndNote(darknessForHour);
         const factor = df.factor;
         score = Math.max(0, Math.min(100, score * factor));
@@ -1297,27 +1348,79 @@
             ? Math.round(inputs.cloudCover * 100)
             : null;
 
-        let metaText;
-        if (isDayHour) {
-          const cloudPart = cloudPct != null ? `${cloudPct}%` : "--";
-          metaText = `${scoreRounded}% · ☁︎ ${cloudPart} · ☀︎`;
-        } else {
-          const cloudPart = cloudPct != null ? `${cloudPct}%` : "--";
-          const moonPct = Math.round((moon.illumination || 0) * 100);
-          metaText = `${scoreRounded}% · ☁︎ ${cloudPart} · 🌙 ${moonPct}%`;
-        }
+        const moonPct = Math.round((moon.illumination || 0) * 100);
 
-        const block = document.createElement("div");
-        block.className = "hour-block";
-        block.innerHTML = `
-          <div class="hour-block-time">${timeLabel}</div>
-          <div class="hour-block-bar">
-            <div class="hour-block-bar-inner" style="height: ${100 - barHeight}%;"></div>
-          </div>
-          <div class="hour-block-meta">${metaText}</div>
-        `;
-        hourlyBarEl.appendChild(block);
+        return {
+          localHour,
+          label: formatHourLocal(localHour),
+          scoreRounded,
+          barHeight,
+          cloudPct,
+          moonPct,
+          isDayHour
+        };
       });
+
+      const timeRow = document.createElement("div");
+      timeRow.className = "hourly-row";
+      timeRow.innerHTML = `<div class=\"hourly-row-label\">Times (evening to dawn)</div>`;
+      const timeTrack = document.createElement("div");
+      timeTrack.className = "hourly-row-track";
+      hourEntries.forEach((entry) => {
+        const cell = document.createElement("div");
+        cell.className = "hour-cell hour-cell-time";
+        cell.textContent = entry.label;
+        timeTrack.appendChild(cell);
+      });
+      timeRow.appendChild(timeTrack);
+
+      const scoreRow = document.createElement("div");
+      scoreRow.className = "hourly-row";
+      scoreRow.innerHTML = `<div class=\"hourly-row-label\">Viewing score</div>`;
+      const scoreTrack = document.createElement("div");
+      scoreTrack.className = "hourly-row-track";
+      hourEntries.forEach((entry) => {
+        const cell = document.createElement("div");
+        cell.className = "hour-cell hour-cell-score";
+        cell.innerHTML = `
+          <div class=\"hour-score-bar\"> <div class=\"hour-score-bar-fill\" style=\"height: ${100 - entry.barHeight}%;\"></div> </div>
+          <div class=\"hour-score-value\">${entry.scoreRounded}%</div>
+          <div class=\"hour-cell-note\">${entry.isDayHour ? "Daylight" : "Dark"}</div>
+        `;
+        scoreTrack.appendChild(cell);
+      });
+      scoreRow.appendChild(scoreTrack);
+
+      const cloudRow = document.createElement("div");
+      cloudRow.className = "hourly-row";
+      cloudRow.innerHTML = `<div class=\"hourly-row-label\">Cloud cover</div>`;
+      const cloudTrack = document.createElement("div");
+      cloudTrack.className = "hourly-row-track";
+      hourEntries.forEach((entry) => {
+        const cell = document.createElement("div");
+        cell.className = "hour-cell hour-cell-note";
+        cell.textContent = entry.cloudPct != null ? `${entry.cloudPct}%` : "--";
+        cloudTrack.appendChild(cell);
+      });
+      cloudRow.appendChild(cloudTrack);
+
+      const moonRow = document.createElement("div");
+      moonRow.className = "hourly-row";
+      moonRow.innerHTML = `<div class=\"hourly-row-label\">Moon brightness</div>`;
+      const moonTrack = document.createElement("div");
+      moonTrack.className = "hourly-row-track";
+      hourEntries.forEach((entry) => {
+        const cell = document.createElement("div");
+        cell.className = `hour-cell hour-cell-note ${entry.isDayHour ? "hour-cell-muted" : ""}`;
+        cell.textContent = `${entry.moonPct}%`;
+        moonTrack.appendChild(cell);
+      });
+      moonRow.appendChild(moonTrack);
+
+      hourlyBarEl.appendChild(timeRow);
+      hourlyBarEl.appendChild(scoreRow);
+      hourlyBarEl.appendChild(cloudRow);
+      hourlyBarEl.appendChild(moonRow);
     }
 
     function recomputeAurora() {
