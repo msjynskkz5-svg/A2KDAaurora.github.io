@@ -585,7 +585,60 @@
 
   // -------- Simple Moon model (phase & brightness) --------
 
-  function computeMoonInfo(date) {
+  const rad = Math.PI / 180;
+  const dayMs = 86400000;
+  const J1970 = 2440588;
+  const J2000 = 2451545;
+  const obliquity = rad * 23.4397;
+
+  function toJulian(date) {
+    return date.valueOf() / dayMs - 0.5 + J1970;
+  }
+
+  function toDays(date) {
+    return toJulian(date) - J2000;
+  }
+
+  function siderealTime(d, lw) {
+    return rad * (280.16 + 360.9856235 * d) - lw;
+  }
+
+  function moonCoords(d) {
+    const L = rad * (218.316 + 13.176396 * d);
+    const M = rad * (134.963 + 13.064993 * d);
+    const F = rad * (93.272 + 13.22935 * d);
+
+    const l = L + rad * 6.289 * Math.sin(M);
+    const b = rad * 5.128 * Math.sin(F);
+
+    const ra = Math.atan2(
+      Math.sin(l) * Math.cos(obliquity) - Math.tan(b) * Math.sin(obliquity),
+      Math.cos(l)
+    );
+    const dec = Math.asin(
+      Math.sin(b) * Math.cos(obliquity) + Math.cos(b) * Math.sin(obliquity) * Math.sin(l)
+    );
+
+    return { ra, dec };
+  }
+
+  function computeMoonAltitude(date, lat, lon) {
+    if (typeof lat !== "number" || typeof lon !== "number") return null;
+
+    const lw = rad * -lon;
+    const phi = rad * lat;
+    const d = toDays(date);
+    const c = moonCoords(d);
+    const H = siderealTime(d, lw) - c.ra;
+
+    const h = Math.asin(
+      Math.sin(phi) * Math.sin(c.dec) + Math.cos(phi) * Math.cos(c.dec) * Math.cos(H)
+    );
+
+    return h;
+  }
+
+  function computeMoonInfo(date, lat, lon) {
     const d = date ? new Date(date) : new Date();
     const synodicMonth = 29.53058867; // days
     // Known reference new moon: 2000-01-06 18:14 UTC
@@ -616,7 +669,12 @@
       phaseName = "Waning crescent";
     }
 
-    return { phase, illumination, phaseName };
+    const altitudeRad = computeMoonAltitude(d, lat, lon);
+    const altitudeDeg =
+      typeof altitudeRad === "number" ? Math.round((altitudeRad * 180) / Math.PI * 10) / 10 : null;
+    const isUp = altitudeDeg == null ? true : altitudeDeg > 0;
+
+    return { phase, illumination, phaseName, altitude: altitudeDeg, isUp };
   }
 
   function getMoonPhaseIcon(phase) {
@@ -646,6 +704,8 @@
     if (darknessContext.alwaysDaylight || darknessContext.isDaylightNow) {
       return 0;
     }
+
+    if (moon.isUp === false) return 0;
 
     const illum = Math.min(1, Math.max(0, moon.illumination || 0));
     if (illum < 0.1) return 0; // very dark Moon – negligible effect
@@ -1133,9 +1193,23 @@
     function updateMoonUI(moon) {
       if (!chipMoonEl || !detailMoonEl || !moon) return;
       const pct = Math.round((moon.illumination || 0) * 100);
-      chipMoonEl.textContent = `${moon.phaseName} (~${pct}% illuminated).`;
+      const baseText = `${moon.phaseName} (~${pct}% illuminated).`;
+      chipMoonEl.textContent = moon.isUp === false ? `Moon below horizon. ${baseText}` : baseText;
+
+      if (moon.isUp === false) {
+        detailMoonEl.textContent =
+          "The Moon is currently below the horizon at your location, so it will not brighten the sky until it rises.";
+        return;
+      }
+
+      const altitudePart =
+        typeof moon.altitude === "number"
+          ? ` It is about ${moon.altitude.toFixed(0)}° above the horizon at the selected time.`
+          : "";
+
       detailMoonEl.textContent =
-        "We use an approximate Moon phase model to estimate how much the Moon brightens the sky. In this v1 it reduces the score slightly when the Moon is bright, especially during dark hours.";
+        "We use an approximate Moon phase model to estimate how much the Moon brightens the sky, including whether it is above your horizon." +
+        altitudePart;
     }
 
     async function refreshDarknessFromSunriseSunset(lat, lon) {
@@ -1245,7 +1319,7 @@
 
       const now = new Date();
       const hourNow = now.getHours() + now.getMinutes() / 60;
-      const moon = moonInfo || computeMoonInfo(now);
+      const moon = moonInfo || computeMoonInfo(now, state.lat, state.lon);
 
       const hourDates = [];
       const buildDateForHour = (hourValue, baseDate) => {
@@ -1311,8 +1385,7 @@
       }
 
       const hourEntries = hourDates.map((hourDate) => {
-        const localHour =
-          hourDate.getHours() + hourDate.getMinutes() / 60;
+        const localHour = hourDate.getHours() + hourDate.getMinutes() / 60;
 
         const inputs = {
           kp: baseInputs.kp,
@@ -1351,7 +1424,9 @@
           isDarkNow: isDarkHour
         };
 
-        const moonPenaltyHour = computeMoonPenalty(moon, darknessForHour);
+        const moonForHour = computeMoonInfo(hourDate, state.lat, state.lon);
+
+        const moonPenaltyHour = computeMoonPenalty(moonForHour, darknessForHour);
         if (moonPenaltyHour > 0) {
           score = Math.max(0, Math.min(100, score - moonPenaltyHour));
         }
@@ -1368,7 +1443,9 @@
             ? Math.round(inputs.cloudCover * 100)
             : null;
 
-        const moonPct = Math.round((moon.illumination || 0) * 100);
+        const moonPct = Math.round(
+          moonForHour && moonForHour.isUp ? (moonForHour.illumination || 0) * 100 : 0
+        );
 
         return {
           localHour,
@@ -1377,6 +1454,7 @@
           barHeight,
           cloudPct,
           moonPct,
+          moonIsUp: moonForHour ? moonForHour.isUp !== false : true,
           isDayHour
         };
       });
@@ -1431,8 +1509,9 @@
       moonTrack.className = "hourly-row-track";
       hourEntries.forEach((entry) => {
         const cell = document.createElement("div");
-        cell.className = `hour-cell hour-cell-note ${entry.isDayHour ? "hour-cell-muted" : ""}`;
-        cell.textContent = `${entry.moonPct}%`;
+        const isMuted = entry.isDayHour || !entry.moonIsUp;
+        cell.className = `hour-cell hour-cell-note ${isMuted ? "hour-cell-muted" : ""}`;
+        cell.textContent = entry.moonIsUp ? `${entry.moonPct}%` : "Below horizon";
         moonTrack.appendChild(cell);
       });
       moonRow.appendChild(moonTrack);
@@ -1472,7 +1551,7 @@
 
       // Update clouds & moon UI
       updateCloudsUI();
-      const moon = computeMoonInfo(now);
+      const moon = computeMoonInfo(now, state.lat, state.lon);
       updateMoonUI(moon);
 
       const geomagLat =
@@ -1538,6 +1617,8 @@
         debug.push(
           `Score after moon adjustment: ${scoreAfterMoon.toFixed(0)} / 100.`
         );
+      } else if (moon && moon.isUp === false) {
+        debug.push("Moon is below the horizon for your location right now.");
       } else {
         debug.push(
           "Moon has negligible effect on the score in this simple v1 model."
