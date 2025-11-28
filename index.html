@@ -480,6 +480,44 @@
           </div>
         </section>
 
+        <!-- LIVE AURORA DATA -->
+        <section class="card card-aurora-data">
+          <div class="card-header">
+            <h2 class="card-title">Live aurora oval (NOAA)</h2>
+            <p class="card-subtitle">
+              Real-time OVATION auroral oval forecast direct from NOAA’s
+              Space Weather Prediction Center.
+            </p>
+          </div>
+
+          <div class="card-body aurora-oval-body">
+            <div class="aurora-oval-meta">
+              <p id="aurora-oval-status" class="aurora-oval-status">
+                Fetching latest NOAA aurora image…
+              </p>
+              <button
+                type="button"
+                class="btn btn-secondary"
+                id="aurora-oval-refresh"
+              >
+                Refresh now
+              </button>
+            </div>
+
+            <div class="aurora-oval-frame">
+              <img
+                id="aurora-oval-img"
+                alt="NOAA OVATION auroral oval forecast"
+                loading="lazy"
+              />
+              <p class="aurora-oval-caption">
+                Image source: NOAA SWPC OVATION Prime auroral oval. The model
+                updates roughly every 5 minutes with real geomagnetic inputs.
+              </p>
+            </div>
+          </div>
+        </section>
+
         <!-- DATA STATUS / EXPLANATORY PANELS -->
         <section class="card card-status">
           <div class="card-header">
