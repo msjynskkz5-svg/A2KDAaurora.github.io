@@ -528,29 +528,39 @@
           <div class="card-body">
             <ul class="status-list">
               <li>
-                <strong>Light pollution</strong> is included using a
-                simple model or, when available, a grid derived from the
-                World Atlas of Artificial Night Sky Brightness, plus an
-                optional manual override.
+                <strong>Light pollution</strong> is automatically
+                estimated from your coordinates, using a World Atlas
+                brightness grid when available and a heuristic fallback
+                otherwise. You can still override the sky brightness
+                manually.
               </li>
               <li>
-                <strong>Darkness</strong> is estimated from a simple
-                solar model (sunrise, sunset and astronomical night) and
-                feeds into both the main score and the “Next dark hours”
-                view.
+                <strong>Darkness windows</strong> use live
+                sunrise/sunset times from sunrise-sunset.org with a
+                solar-model fallback, and feed both the main score and
+                the “Next dark hours” view.
               </li>
               <li>
-                <strong>Clouds and Moon</strong> currently use built-in
-                placeholder models (fixed 20% cloud cover and
-                approximate Moon phase/brightness) that already
-                influence the score; live weather/ephemeris APIs will
-                come later.
+                <strong>Clouds</strong> are assumed “mostly clear” (~20%
+                cover) for now; live weather data per hour is still to
+                come.
               </li>
               <li>
-                Your approximate <strong>location</strong> may be
-                estimated from your internet connection if device GPS is
-                not available; as a last resort we fall back to the Isle
-                of Rùm.
+                The <strong>Moon</strong> uses an internal
+                phase/illumination model to reduce the score when the
+                Moon is bright. A future version will refine this with
+                altitude-aware ephemeris data.
+              </li>
+              <li>
+                <strong>Aurora oval</strong> imagery is live from NOAA
+                SWPC’s OVATION model and updates roughly every five
+                minutes.
+              </li>
+              <li>
+                Your <strong>location</strong> is pulled from device GPS
+                when permitted, falls back to IP-based lookup, and uses a
+                dark-sky default on the Isle of Rùm if nothing else
+                works.
               </li>
             </ul>
           </div>
