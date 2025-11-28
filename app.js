@@ -1249,6 +1249,12 @@
 
       hourlyBarEl.innerHTML = "";
 
+      const scoreColorForValue = (value) => {
+        if (value >= 70) return "#3cfba6";
+        if (value >= 40) return "#38bdf8";
+        return "#f97316";
+      };
+
       const addPlaceholderRows = (count = 8) => {
         const timeRow = document.createElement("div");
         timeRow.className = "hourly-row";
@@ -1272,8 +1278,9 @@
           const cell = document.createElement("div");
           cell.className = "hour-cell hour-cell-score";
           cell.innerHTML = `
-            <div class=\"hour-score-bar\"> <div class=\"hour-score-bar-fill\" style=\"height: 50%;\"></div> </div>
-            <div class=\"hour-score-value\">--%</div>
+            <div class=\"hour-score-gauge\" style=\"--score: 50; --score-color: #3cfba6;\">
+              <div class=\"hour-score-value\">--</div>
+            </div>
             <div class=\"hour-cell-note\">Waiting for location…</div>
           `;
           scoreTrack.appendChild(cell);
@@ -1436,7 +1443,7 @@
         score = Math.max(0, Math.min(100, score * factor));
 
         const scoreRounded = Math.round(score);
-        const barHeight = Math.max(8, Math.min(100, scoreRounded));
+        const scoreColor = scoreColorForValue(scoreRounded);
 
         const cloudPct =
           typeof inputs.cloudCover === "number"
@@ -1451,7 +1458,7 @@
           localHour,
           label: formatHourLocal(localHour),
           scoreRounded,
-          barHeight,
+          scoreColor,
           cloudPct,
           moonPct,
           moonIsUp: moonForHour ? moonForHour.isUp !== false : true,
@@ -1481,8 +1488,9 @@
         const cell = document.createElement("div");
         cell.className = "hour-cell hour-cell-score";
         cell.innerHTML = `
-          <div class=\"hour-score-bar\"> <div class=\"hour-score-bar-fill\" style=\"height: ${100 - entry.barHeight}%;\"></div> </div>
-          <div class=\"hour-score-value\">${entry.scoreRounded}%</div>
+          <div class=\"hour-score-gauge\" style=\"--score: ${entry.scoreRounded}; --score-color: ${entry.scoreColor};\">
+            <div class=\"hour-score-value\">${entry.scoreRounded}%</div>
+          </div>
           <div class=\"hour-cell-note\">${entry.isDayHour ? "Daylight" : "Dark"}</div>
         `;
         scoreTrack.appendChild(cell);
