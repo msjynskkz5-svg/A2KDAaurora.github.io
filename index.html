@@ -240,8 +240,9 @@
     <div class="kp-column">
       <h2 class="card-title">Geomagnetic activity (KP)</h2>
       <p class="card-subtitle">
-        Use this slider to approximate the current KP index. Live
-        data will be wired in later.
+        We auto-load the latest KP estimate from NOAA’s live aurora
+        prediction feed. Use the slider below to override it if
+        needed.
       </p>
 
       <div class="kp-control">
@@ -267,9 +268,7 @@
           <input type="checkbox" id="kp-live-toggle" />
           Use live NOAA KP (beta)
         </label>
-        <div id="kp-live-status" class="kp-live-status">
-          Live KP off – using manual value.
-        </div>
+        <div id="kp-live-status" class="kp-live-status"></div>
       </div>
     </div>
 

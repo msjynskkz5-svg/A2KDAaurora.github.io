@@ -1325,32 +1325,40 @@
           statusEl.textContent = `Live KP ≈ ${kp.toFixed(1)} (NOAA, ${displayTime})`;
         } catch (err) {
           console.warn("Failed to update live KP:", err);
-          statusEl.textContent = "Live KP unavailable – using manual value.";
           toggleEl.checked = false;
-          if (intervalId !== null) {
-            clearInterval(intervalId);
-            intervalId = null;
-          }
+          stopLiveUpdates("Live KP unavailable – using manual value.");
         }
+      }
+
+      function stopLiveUpdates(manualLabel) {
+        if (intervalId !== null) {
+          clearInterval(intervalId);
+          intervalId = null;
+        }
+        statusEl.textContent = manualLabel || "Live KP off – using manual value.";
+      }
+
+      function startLiveUpdates() {
+        // Turn ON: fetch now and every hour
+        if (intervalId !== null) {
+          clearInterval(intervalId);
+        }
+        toggleEl.checked = true;
+        updateFromLiveKp();
+        intervalId = window.setInterval(updateFromLiveKp, 60 * 60 * 1000);
       }
 
       toggleEl.addEventListener("change", () => {
         if (toggleEl.checked) {
-          // Turn ON: fetch now and every hour
-          updateFromLiveKp();
-          intervalId = window.setInterval(updateFromLiveKp, 60 * 60 * 1000);
+          startLiveUpdates();
         } else {
-          // Turn OFF: stop auto-updates
-          if (intervalId !== null) {
-            clearInterval(intervalId);
-            intervalId = null;
-          }
-          statusEl.textContent = "Live KP off – using manual value.";
+          stopLiveUpdates();
         }
       });
 
-      // Initial label
-      statusEl.textContent = "Live KP off – using manual value.";
+      // Auto-start live KP so the geomagnetic activity section is fed by the
+      // real aurora prediction feed by default.
+      startLiveUpdates();
     }
 
     let auroraOvalObjectUrl = null;
