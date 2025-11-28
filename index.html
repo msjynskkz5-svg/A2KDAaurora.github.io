@@ -436,9 +436,8 @@
                     id="detail-clouds"
                     class="detail-text"
                   >
-                    Right now we use a simple fixed cloud cover value
-                    that feeds into the score. In a full version this
-                    will come from a weather API and vary by hour.
+                    Cloud cover is pulled live for your coordinates and
+                    feeds both the main score and the hourly strip.
                   </p>
                 </div>
 
@@ -542,8 +541,9 @@
               </li>
               <li>
                 <strong>Clouds</strong> are assumed “mostly clear” (~20%
-                cover) for now; live weather data per hour is still to
-                come.
+                cover) only if live weather data can’t be fetched. When
+                available, we use live cloud cover for your coordinates
+                and feed it into the score and hourly chart.
               </li>
               <li>
                 The <strong>Moon</strong> uses an internal
@@ -587,9 +587,10 @@
             </div>
             <div class="card-body">
               <p>
-                Cloud cover will eventually be pulled from a weather
-                API. For now we assume “mostly clear (20%)” and feed
-                that into both the main score and the hourly chart.
+                Cloud cover comes from a live weather feed for your
+                coordinates when available. If that fails we assume
+                “mostly clear (20%)” as a fallback for both the score and
+                the hourly chart.
               </p>
             </div>
           </article>
