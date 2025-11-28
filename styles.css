@@ -546,6 +546,14 @@ input[type="range"]::-moz-range-thumb {
   flex-shrink: 0;
   font-weight: 600;
   color: var(--text);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.moon-phase-icon {
+  font-size: 1rem;
+  line-height: 1;
 }
 
 .hourly-row-track {

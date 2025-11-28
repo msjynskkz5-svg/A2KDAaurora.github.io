@@ -619,6 +619,26 @@
     return { phase, illumination, phaseName };
   }
 
+  function getMoonPhaseIcon(phase) {
+    if (typeof phase !== "number") return "🌙";
+    if (phase < 0.03 || phase > 0.97) return "🌑";
+    if (phase < 0.22) return "🌒";
+    if (phase < 0.28) return "🌓";
+    if (phase < 0.47) return "🌔";
+    if (phase < 0.53) return "🌕";
+    if (phase < 0.72) return "🌖";
+    if (phase < 0.78) return "🌗";
+    return "🌘";
+  }
+
+  function renderMoonLabel(moon) {
+    const icon = getMoonPhaseIcon(moon ? moon.phase : null);
+    const phaseLabel = moon && moon.phaseName ? moon.phaseName : "Moon phase";
+    return `
+      <div class=\"hourly-row-label\" aria-label=\"${phaseLabel}\">\n        <span class=\"moon-phase-icon\" role=\"img\" aria-label=\"${phaseLabel}\">${icon}</span>\n        <span>Moon brightness</span>\n      </div>
+    `;
+  }
+
   function computeMoonPenalty(moon, darknessContext) {
     if (!moon || !darknessContext) return 0;
 
@@ -1201,7 +1221,7 @@
 
         const moonRow = document.createElement("div");
         moonRow.className = "hourly-row";
-        moonRow.innerHTML = `<div class=\"hourly-row-label\">Moon brightness</div>`;
+        moonRow.innerHTML = renderMoonLabel(computeMoonInfo(new Date()));
         const moonTrack = document.createElement("div");
         moonTrack.className = "hourly-row-track";
         for (let i = 0; i < count; i++) {
@@ -1406,7 +1426,7 @@
 
       const moonRow = document.createElement("div");
       moonRow.className = "hourly-row";
-      moonRow.innerHTML = `<div class=\"hourly-row-label\">Moon brightness</div>`;
+      moonRow.innerHTML = renderMoonLabel(moon);
       const moonTrack = document.createElement("div");
       moonTrack.className = "hourly-row-track";
       hourEntries.forEach((entry) => {
