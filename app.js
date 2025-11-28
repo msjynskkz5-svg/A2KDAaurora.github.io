@@ -622,6 +622,9 @@
     const detailDarknessEl = document.getElementById("detail-darkness");
     const detailCloudsEl = document.getElementById("detail-clouds");
     const detailMoonEl = document.getElementById("detail-moon");
+    const auroraOvalImgEl = document.getElementById("aurora-oval-img");
+    const auroraOvalStatusEl = document.getElementById("aurora-oval-status");
+    const auroraOvalRefreshEl = document.getElementById("aurora-oval-refresh");
 
     const state = {
       lat: null,
@@ -1348,7 +1351,70 @@
 
       // Initial label
       statusEl.textContent = "Live KP off – using manual value.";
-    } 
+    }
+
+    let auroraOvalObjectUrl = null;
+
+    function setAuroraOvalStatus(text) {
+      if (!auroraOvalStatusEl) return;
+      auroraOvalStatusEl.textContent = text;
+    }
+
+    async function refreshAuroraOval() {
+      if (!auroraOvalImgEl || !auroraOvalStatusEl) return;
+
+      const url =
+        "https://services.swpc.noaa.gov/images/aurora-forecast-northern-hemisphere.jpg";
+
+      try {
+        setAuroraOvalStatus("Fetching latest NOAA aurora image…");
+        const response = await fetch(url, { cache: "no-store" });
+        if (!response.ok) {
+          throw new Error("Aurora oval fetch failed with status " + response.status);
+        }
+
+        const blob = await response.blob();
+
+        if (auroraOvalObjectUrl) {
+          URL.revokeObjectURL(auroraOvalObjectUrl);
+        }
+
+        auroraOvalObjectUrl = URL.createObjectURL(blob);
+        auroraOvalImgEl.src = auroraOvalObjectUrl;
+
+        const lastModified = response.headers.get("last-modified");
+        let stamp = "just now";
+        if (lastModified) {
+          const parsed = new Date(lastModified);
+          if (!Number.isNaN(parsed.getTime())) {
+            stamp = parsed.toUTCString();
+          }
+        }
+
+        setAuroraOvalStatus(
+          `Live aurora oval from NOAA OVATION — updated ${stamp}.`
+        );
+      } catch (err) {
+        console.warn("Failed to load aurora oval image", err);
+        setAuroraOvalStatus(
+          "Couldn’t load the live NOAA aurora oval. Please try again."
+        );
+      }
+    }
+
+    function initAuroraOvalLive() {
+      if (!auroraOvalImgEl || !auroraOvalStatusEl) return;
+
+      refreshAuroraOval();
+
+      if (auroraOvalRefreshEl) {
+        auroraOvalRefreshEl.addEventListener("click", () => {
+          refreshAuroraOval();
+        });
+      }
+
+      window.setInterval(refreshAuroraOval, 30 * 60 * 1000);
+    }
 
     async function updateLightPollution(lat, lon, options) {
       try {
@@ -1639,6 +1705,7 @@
       updateFooterTime();
       updateCloudsUI();
       initKpLiveMode();
+      initAuroraOvalLive();
 
       kpInputEl.addEventListener("input", onKpChange);
 
