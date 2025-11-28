@@ -320,6 +320,16 @@
     return v;
   }
 
+  function isoToLocalHour(isoString) {
+    if (!isoString) return null;
+    const d = new Date(isoString);
+    if (Number.isNaN(d.getTime())) return null;
+    const hour = d.getHours();
+    const minutes = d.getMinutes();
+    const seconds = d.getSeconds();
+    return hour + minutes / 60 + seconds / 3600;
+  }
+
   function isHourBetween(h, start, end) {
     if (start == null || end == null) return false;
     h = wrapHour(h);
@@ -449,6 +459,43 @@
       alwaysAstronomicalDark,
       isDaylightNow,
       isDarkNow
+    };
+  }
+
+  function buildDarknessFromLiveTimes(results) {
+    if (!results) return null;
+
+    const sunrise = isoToLocalHour(results.sunrise);
+    const sunset = isoToLocalHour(results.sunset);
+    const astroDawn = isoToLocalHour(results.astronomical_twilight_begin);
+    const astroDusk = isoToLocalHour(results.astronomical_twilight_end);
+
+    if (astroDawn == null || astroDusk == null) return null;
+
+    const now = new Date();
+    const hourNow = now.getHours() + now.getMinutes() / 60;
+
+    const hasDay = sunrise != null && sunset != null;
+    const hasAstronomicalNight = true;
+
+    const isDaylightNow = hasDay && isHourBetween(hourNow, sunrise, sunset);
+    const isDarkNow = isHourBetween(hourNow, astroDusk, astroDawn);
+
+    return {
+      date: now,
+      sunrise,
+      sunset,
+      astroDawn,
+      astroDusk,
+      hasDay,
+      alwaysDaylight: false,
+      alwaysNight: false,
+      hasAstronomicalNight,
+      neverDark: false,
+      alwaysAstronomicalDark: false,
+      isDaylightNow,
+      isDarkNow,
+      source: "live-api"
     };
   }
 
@@ -637,7 +684,9 @@
       kp: parseFloat(kpInputEl.value) || 3.5,
       cloudCover: 0.2, // v1: fixed 20% cloud cover used in the score
       locationShort: "your location",
-      darkness: null
+      darkness: null,
+      darknessLive: null,
+      darknessSource: "model"
     };
 
     function updateFooterTime() {
@@ -768,12 +817,17 @@
           extra = ` (sunset ${sunsetStr}, sunrise ${sunriseStr})`;
         }
 
+        const sourceNote =
+          darkness.source === "live-api"
+            ? "Times loaded from a live sunrise/sunset service for your coordinates."
+            : "We approximate astronomical-night when the Sun is 18° below the horizon.";
+
         detailDarknessEl.textContent =
-          `We approximate astronomical-night when the Sun is 18° below the horizon. For today that gives a dark window from about ${start}–${end}${extra}. Times are approximate.`;
+          `${sourceNote} For today that gives a dark window from about ${start}–${end}${extra}.`;
 
         if (nextDarkSubtitleEl) {
           nextDarkSubtitleEl.textContent =
-            `Approximate aurora visibility score across the main dark window tonight (${start}–${end}).`;
+            `Aurora visibility score across key dark hours tonight (${start}–${end}) using live times for your location.`;
         }
       } else if (darkness.hasDay) {
         const sunriseStr = formatHourLocal(darkness.sunrise);
@@ -951,6 +1005,37 @@
         "We use an approximate Moon phase model to estimate how much the Moon brightens the sky. In this v1 it reduces the score slightly when the Moon is bright, especially during dark hours.";
     }
 
+    async function refreshDarknessFromSunriseSunset(lat, lon) {
+      try {
+        if (typeof lat !== "number" || typeof lon !== "number") return;
+        const url =
+          "https://api.sunrise-sunset.org/json?formatted=0&lat=" +
+          encodeURIComponent(lat) +
+          "&lng=" +
+          encodeURIComponent(lon);
+
+        const res = await fetch(url, { headers: { Accept: "application/json" } });
+        if (!res.ok) {
+          throw new Error("Sunrise-sunset fetch failed with status " + res.status);
+        }
+
+        const data = await res.json();
+        if (!data || data.status !== "OK" || !data.results) {
+          throw new Error("Unexpected sunrise-sunset response");
+        }
+
+        const live = buildDarknessFromLiveTimes(data.results);
+        if (live) {
+          state.darknessLive = live;
+          state.darknessSource = "live-api";
+          recomputeAurora();
+        }
+      } catch (err) {
+        console.warn("Falling back to model darkness times", err);
+        state.darknessLive = null;
+      }
+    }
+
     // -------- Hourly chart: uses darkness + clouds + moon + brain --------
     function renderHourlyChart(darkness, baseInputs, moonInfo) {
       if (!hourlyBarEl) return;
@@ -1116,9 +1201,13 @@
       const now = new Date();
       const localHour = now.getHours() + now.getMinutes() / 60;
 
-      // Update simple solar darkness info
-      const darkness = computeDarknessInfo(state.lat, state.lon, now);
+      // Update darkness info – prefer live sunrise/sunset when available
+      let darkness = state.darknessLive || computeDarknessInfo(state.lat, state.lon, now);
+      if (darkness && !darkness.source) {
+        darkness = { ...darkness, source: state.darknessLive ? "live-api" : "model" };
+      }
       state.darkness = darkness;
+      state.darknessSource = darkness ? darkness.source : "model";
       if (darkness) {
         updateDarknessUI(darkness);
       }
@@ -1490,6 +1579,7 @@
       });
 
       updateLightPollution(lat, lon, { placeContext: "dark-nature" });
+      refreshDarknessFromSunriseSunset(lat, lon);
     }
 
     function useIpLocationFallback() {
@@ -1521,6 +1611,7 @@
 
           if (state.lat != null && state.lon != null) {
             updateLightPollution(state.lat, state.lon);
+            refreshDarknessFromSunriseSunset(state.lat, state.lon);
           } else {
             // If we somehow didn't get usable coordinates, fall back to default.
             useDefaultRumLocation();
@@ -1560,6 +1651,7 @@
           });
 
           updateLightPollution(latitude, longitude);
+          refreshDarknessFromSunriseSunset(latitude, longitude);
         },
         (err) => {
           console.warn("Geolocation failed, falling back to IP", err);
@@ -1646,6 +1738,7 @@
           }
 
           updateLightPollution(lat, lon, { placeContext });
+          refreshDarknessFromSunriseSunset(lat, lon);
         })
         .catch((err) => {
           console.error("Search failed", err);
