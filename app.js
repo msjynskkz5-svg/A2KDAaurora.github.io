@@ -1249,6 +1249,24 @@
 
       hourlyBarEl.innerHTML = "";
 
+      const attachScrollSync = (tracks) => {
+        if (!tracks || !tracks.length) return;
+        let syncing = false;
+        tracks.forEach((track) => {
+          track.addEventListener("scroll", () => {
+            if (syncing) return;
+            syncing = true;
+            const { scrollLeft } = track;
+            tracks.forEach((other) => {
+              if (other !== track) {
+                other.scrollLeft = scrollLeft;
+              }
+            });
+            syncing = false;
+          });
+        });
+      };
+
       const scoreColorForValue = (value) => {
         if (value >= 70) return "#3cfba6";
         if (value >= 40) return "#38bdf8";
@@ -1312,6 +1330,8 @@
           moonTrack.appendChild(cell);
         }
         moonRow.appendChild(moonTrack);
+
+        attachScrollSync([timeTrack, scoreTrack, cloudTrack, moonTrack]);
 
         hourlyBarEl.appendChild(timeRow);
         hourlyBarEl.appendChild(scoreRow);
@@ -1523,6 +1543,8 @@
         moonTrack.appendChild(cell);
       });
       moonRow.appendChild(moonTrack);
+
+      attachScrollSync([timeTrack, scoreTrack, cloudTrack, moonTrack]);
 
       hourlyBarEl.appendChild(timeRow);
       hourlyBarEl.appendChild(scoreRow);
