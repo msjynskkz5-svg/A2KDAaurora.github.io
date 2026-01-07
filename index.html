@@ -447,9 +447,8 @@
                     id="detail-moon"
                     class="detail-text"
                   >
-                    We use an approximate Moon phase model to estimate
-                    how much the Moon brightens the sky. In this v1 it
-                    reduces the score slightly when the Moon is bright,
+                    We estimate Moon phase, brightness, and altitude to
+                    understand how much moonlight brightens the sky,
                     especially during dark hours.
                   </p>
                 </div>
@@ -527,6 +526,11 @@
           <div class="card-body">
             <ul class="status-list">
               <li>
+                <strong>KP index</strong> is pulled live from NOAA’s
+                planetary KP feed by default, with a manual slider
+                override if you want to explore different conditions.
+              </li>
+              <li>
                 <strong>Light pollution</strong> is automatically
                 estimated from your coordinates, using a World Atlas
                 brightness grid when available and a heuristic fallback
@@ -548,13 +552,14 @@
               <li>
                 The <strong>Moon</strong> uses an internal
                 phase/illumination model to reduce the score when the
-                Moon is bright. A future version will refine this with
-                altitude-aware ephemeris data.
+                Moon is bright, and accounts for whether the Moon is
+                above your horizon.
               </li>
               <li>
                 <strong>Aurora oval</strong> imagery is live from NOAA
-                SWPC’s OVATION model and updates roughly every five
-                minutes.
+                SWPC’s OVATION model. NOAA refreshes the model roughly
+                every five minutes, and the app refreshes the image
+                about every 30 minutes (or on demand).
               </li>
               <li>
                 Your <strong>location</strong> is pulled from device GPS
@@ -601,10 +606,9 @@
             </div>
             <div class="card-body">
               <p>
-                We approximate Moon phase and brightness and use this to
-                slightly reduce the score when the Moon is bright during
-                dark hours. In a future version we’ll also account for
-                Moon altitude and more detailed sky brightness.
+                We estimate Moon phase, brightness, and altitude and use
+                this to reduce the score when the Moon is bright during
+                dark hours, especially when it is higher in the sky.
               </p>
             </div>
           </article>
