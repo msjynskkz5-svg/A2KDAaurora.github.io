@@ -470,23 +470,26 @@
     const astroDawn = isoToLocalHour(results.astronomical_twilight_begin);
     const astroDusk = isoToLocalHour(results.astronomical_twilight_end);
 
-    if (astroDawn == null || astroDusk == null) return null;
-
     const now = new Date();
     const hourNow = now.getHours() + now.getMinutes() / 60;
 
     const hasDay = sunrise != null && sunset != null;
-    const hasAstronomicalNight = true;
+    const hasAstronomicalNight =
+      astroDawn != null && astroDusk != null;
 
     const isDaylightNow = hasDay && isHourBetween(hourNow, sunrise, sunset);
-    const isDarkNow = isHourBetween(hourNow, astroDusk, astroDawn);
+    const isDarkNow = hasAstronomicalNight
+      ? isHourBetween(hourNow, astroDusk, astroDawn)
+      : false;
+
+    if (!hasDay && !hasAstronomicalNight) return null;
 
     return {
       date: now,
       sunrise,
       sunset,
-      astroDawn,
-      astroDusk,
+      astroDawn: hasAstronomicalNight ? astroDawn : null,
+      astroDusk: hasAstronomicalNight ? astroDusk : null,
       hasDay,
       alwaysDaylight: false,
       alwaysNight: false,
@@ -495,7 +498,7 @@
       alwaysAstronomicalDark: false,
       isDaylightNow,
       isDarkNow,
-      source: "live-api"
+      source: hasAstronomicalNight ? "live-api" : "live-api-partial"
     };
   }
 
@@ -916,18 +919,30 @@
           `${sourceNote} For today that gives a dark window from about ${start}–${end}${extra}.`;
 
         if (nextDarkSubtitleEl) {
+          const sourceLabel =
+            darkness.source === "live-api"
+              ? "live times"
+              : "modelled times";
           nextDarkSubtitleEl.textContent =
-            `Aurora visibility score across key dark hours tonight (${start}–${end}) using live times for your location.`;
+            `Aurora visibility score across key dark hours tonight (${start}–${end}) using ${sourceLabel} for your location.`;
         }
       } else if (darkness.hasDay) {
         const sunriseStr = formatHourLocal(darkness.sunrise);
         const sunsetStr = formatHourLocal(darkness.sunset);
         chipDarknessEl.textContent = `Roughly dark between sunset ${sunsetStr} and sunrise ${sunriseStr}.`;
+        const sourceNote =
+          darkness.source === "live-api-partial"
+            ? "Sunrise and sunset are loaded from a live sunrise/sunset service for your coordinates, but twilight timings were not available."
+            : "We estimate sunrise and sunset with a simple solar model based on your latitude, longitude and date.";
         detailDarknessEl.textContent =
-          "We estimate sunrise and sunset with a simple solar model based on your latitude, longitude and date. In a future version we’ll refine twilight handling further.";
+          `${sourceNote} In a future version we’ll refine twilight handling further.`;
         if (nextDarkSubtitleEl) {
+          const sourceLabel =
+            darkness.source === "live-api-partial"
+              ? "live sunrise/sunset times"
+              : "a simple solar darkness model";
           nextDarkSubtitleEl.textContent =
-            "Aurora visibility score across the next few hours, using a simple solar darkness model.";
+            `Aurora visibility score across the next few hours, using ${sourceLabel}.`;
         }
       } else {
         chipDarknessEl.textContent = "Darkness timings unavailable.";
@@ -1241,7 +1256,7 @@
         const live = buildDarknessFromLiveTimes(data.results);
         if (live) {
           state.darknessLive = live;
-          state.darknessSource = "live-api";
+          state.darknessSource = live.source || "live-api";
           recomputeAurora();
         }
       } catch (err) {
