@@ -711,7 +711,14 @@
     if (illum < 0.1) return 0; // very dark Moon – negligible effect
 
     const maxPenalty = 18; // max points full Moon can knock off
-    return maxPenalty * illum;
+    const altitude =
+      typeof moon.altitude === "number" ? moon.altitude : null;
+    const altitudeFactor =
+      altitude == null
+        ? 0.7
+        : Math.min(1, Math.max(0, altitude / 60));
+
+    return maxPenalty * illum * altitudeFactor;
   }
 
   // -------- App wiring --------
@@ -1205,10 +1212,10 @@
       const altitudePart =
         typeof moon.altitude === "number"
           ? ` It is about ${moon.altitude.toFixed(0)}° above the horizon at the selected time.`
-          : "";
+          : " We couldn’t estimate the Moon’s altitude for this location.";
 
       detailMoonEl.textContent =
-        "We use an approximate Moon phase model to estimate how much the Moon brightens the sky, including whether it is above your horizon." +
+        "We estimate Moon phase, illumination, and altitude to judge how much moonlight impacts your sky." +
         altitudePart;
     }
 
