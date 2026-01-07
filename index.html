@@ -447,9 +447,8 @@
                     id="detail-moon"
                     class="detail-text"
                   >
-                    We use an approximate Moon phase model to estimate
-                    how much the Moon brightens the sky. In this v1 it
-                    reduces the score slightly when the Moon is bright,
+                    We estimate Moon phase, brightness, and altitude to
+                    understand how much moonlight brightens the sky,
                     especially during dark hours.
                   </p>
                 </div>
@@ -553,8 +552,8 @@
               <li>
                 The <strong>Moon</strong> uses an internal
                 phase/illumination model to reduce the score when the
-                Moon is bright. A future version will refine this with
-                altitude-aware ephemeris data.
+                Moon is bright, and accounts for whether the Moon is
+                above your horizon.
               </li>
               <li>
                 <strong>Aurora oval</strong> imagery is live from NOAA
@@ -607,10 +606,9 @@
             </div>
             <div class="card-body">
               <p>
-                We approximate Moon phase and brightness and use this to
-                slightly reduce the score when the Moon is bright during
-                dark hours. In a future version we’ll also account for
-                Moon altitude and more detailed sky brightness.
+                We estimate Moon phase, brightness, and altitude and use
+                this to reduce the score when the Moon is bright during
+                dark hours, especially when it is higher in the sky.
               </p>
             </div>
           </article>
